@@ -1,0 +1,23 @@
+<!doctype html>
+<html class="h-full bg-white" lang="en-US">
+  <head>
+    <title>Flight Tracker</title>
+    <meta charset="UTF-8">
+    <link rel="stylesheet" href="/stylesheets/output.css">
+  </head>
+  <body class="h-full">
+    <header>
+      <div class="text-center mt-10">
+        <div class="min-w-0 flex-1">
+          <h1 class="drop-shadow-[0_1.2px_1.2px_rgba(79,70,229,0.8)] text-5xl font-bold leading-7 text-gray-900">Flight Tracker</h1>
+        </div>
+        <div class="mt-10 sm:mx-auto sm:w-full sm:max-w-sm">
+          <img class="mx-auto" src="/images/plane.svg" alt="Plane Image">
+        </div>
+      </div>
+    </header>
+    <main class="mx-20">
+      <%== yield %>
+    </main>
+  </body>
+</html>
