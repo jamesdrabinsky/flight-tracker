@@ -1,3 +1,10 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+@layer base {
+    ol, ul, menu {
+        list-style: disc;
+        margin: revert;
+    }
+}

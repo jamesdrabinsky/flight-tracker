@@ -27,5 +27,7 @@ CREATE TABLE users (
     password text NOT NULL
 );
 
-INSERT INTO users (first_name, last_name, username, password) VALUES ('James', 'Drabinsky', 'jamesdrabinsky', 'Scottiebarnes4!');
-INSERT INTO users (first_name, last_name, username, password) VALUES ('Cayle', 'Drabinsky', 'cayledrabinsky', 'ChrisBosh4!');
+-- INSERT INTO users (first_name, last_name, username, password) VALUES ('James', 'Drabinsky', 'jamesdrabinsky', 'Scottiebarnes4!');
+-- INSERT INTO users (first_name, last_name, username, password) VALUES ('Cayle', 'Drabinsky', 'cayledrabinsky', 'ChrisBosh4!');
+-- INSERT INTO users (first_name, last_name, username, password) VALUES ('Allie', 'Drabinsky', 'alliedrabinsky', 'Ballerina23');
+-- INSERT INTO users (first_name, last_name, username, password) VALUES ('Daryl', 'Drabinsky', 'daryldrabinsky', 'socialmedia11');
