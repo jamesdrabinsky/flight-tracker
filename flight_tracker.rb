@@ -1,3 +1,5 @@
+require 'date'
+
 require "sinatra"
 # require "sinatra/content_for"
 # require "tilt/erubis"
@@ -23,6 +25,21 @@ helpers do
   def flash_formatting
     erb :flash_error_message
   end
+
+  def airport_options
+    connection = PG.connect(dbname: "flights")
+    sql = <<~SQL
+      SELECT country_city_airport 
+      FROM airports
+      WHERE name is NOT NULL 
+      ORDER BY country, city, name;
+    SQL
+    connection.exec(sql)
+  end
+
+  def flight_dates
+    [Date.today, Date.today + 1].map { |d| d.strftime('%Y-%m-%d') }
+  end
 end
 
 def require_signed_in_user
@@ -45,7 +62,8 @@ def load_user_credentials(username)
   result = connection.exec_params("SELECT * FROM users WHERE username = $1", [username])
   tuple = result.first || {}
   
-  { first_name: tuple.fetch("first_name", nil), 
+  { user_id: tuple.fetch("id", nil),
+    first_name: tuple.fetch("first_name", nil), 
     last_name: tuple.fetch("last_name", nil), 
     username: tuple.fetch("username", nil), 
     password: tuple.fetch("password", BCrypt::Password.create(nil)) }
@@ -55,10 +73,6 @@ def valid_credentials?(username, password)
   credentials = load_user_credentials(username)
   BCrypt::Password.new(credentials[:password]) == password
 end
-
-# def current_user
-
-# end
 
 def validate_registration(params)
   first_name, last_name, username, password = params.values.map(&:strip)
@@ -80,6 +94,35 @@ def create_new_user(first_name, last_name, username, password)
   connection.exec_params(sql, [first_name, last_name, username, hashed_password])
 end
 
+def validate_flight(params)
+  origin, destination, departure_string, return_string = params.values
+  departure_date, return_date = [departure_string, return_string].map { |d| Date.strptime(d, "%Y-%m-%d") }
+  session[:error] = []
+
+  session[:error] << "Origin or destination cannot be empty" if origin.empty? || destination.empty?
+  session[:error] << "Origin and destination values cannot be the same" if origin == destination
+  if !departure_string =~ /\d{4}\/\d{2}\/\d{2}/ || !return_string =~ /\d{4}\/\d{2}\/\d{2}/
+    session[:error] << "Departure and return dates can only contain numeric characters (mm/dd/yyyy)"
+  end
+  session[:error] << "Return date must be on the same day or after the departure date" if return_date < departure_date
+
+  session.delete(:error) if session[:error].empty?
+end
+
+def create_new_flight(origin, destination, departure_date, return_date, user_id)
+  sql = <<~SQL
+    INSERT INTO flights (origin, destination, departure_date, return_date, user_id) 
+    VALUES ($1, $2, $3, $4, $5)
+  SQL
+  connection = PG.connect(dbname: "flights")
+  p connection.exec_params(sql, [origin, destination, departure_date, return_date, user_id])
+end
+
+def all_flights
+  connection = PG.connect(dbname: "flights")
+  connection.exec_params("SELECT * FROM flights WHERE user_id = $1", [session[:user_id]])
+end
+
 get "/" do 
   erb :index, layout: :layout
 end
@@ -93,16 +136,9 @@ end
 post "/users/signin" do
   username, password = params.values
 
-  # binding.pry
-
   if valid_credentials?(username, password)
-    first_name, last_name, * = load_user_credentials(username).values
-
-    session[:first_name] = first_name
-    session[:last_name] = last_name
-    session[:username] = username
+    session.merge!(load_user_credentials(username))
     session[:success] = "You are signed in"
-
     redirect "/"
   else
     session[:error] = "Invalid credentials"
@@ -135,7 +171,19 @@ post "/register" do
   end
 end
 
-# # Render the new flight form
-# get "/flight/new" do
-#   erb :new_list, layout: :layout
-# end
+get "/flight/new" do 
+  erb :new_flight, layout: :layout
+end
+
+post "/flight/new" do 
+  validate_flight(params)
+
+  if session[:error]
+    status 422
+    erb :new_flight, layout: :layout
+  else
+    create_new_flight(*params.values, session[:user_id])
+    session[:success] = "The list has been created."
+    redirect "/"
+  end
+end

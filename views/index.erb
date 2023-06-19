@@ -1,18 +1,37 @@
-<div class="px-4 sm:px-0">
-  <h3 class="text-base font-semibold leading-7 text-gray-900">Flight Information</h3>
+<div class="sm:flex sm:items-center">
+  <div class="sm:flex-auto">
+    <h1 class="text-base font-semibold leading-6 text-gray-900">Flight Information</h1>
+  </div>
+  <div class="mt-4 sm:ml-16 sm:mt-0 sm:flex-none">
+    <button type="button" class="block rounded-md bg-indigo-600 px-3 py-2 text-center text-sm font-semibold text-white shadow-sm hover:bg-indigo-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600">
+      <a href="/flight/new">Add Flight</a>
+    </button>
+  </div>
 </div>
 <div class="mt-6 border-y-4 border-gray-100">
-  <dl class="divide-y divide-gray-100">
+  <dl class="divide-y-2 divide-gray-100">
+    
     <div class="px-4 py-6 sm:grid sm:grid-cols-5 sm:gap-4 sm:px-0">
       <dt class="text-sm font-semibold leading-6 text-gray-900">Origin</dt>
-      <dd class="mt-1 flex text-sm font-semibold leading-6 text-gray-900 sm:col-span-4 sm:mt-0">
-        <span class="flex-grow">Desitination</span>
-        <span class="flex-grow">Date</span>
-        <span class="flex-grow">Round trip?</span>
-        <span class="ml-4 flex-shrink-0">
-          <button type="button" class="rounded-md bg-white font-medium text-indigo-600 hover:text-indigo-500">Update</button>
-        </span>
+      <dd class="mt-1 flex font-semibold text-sm leading-6 text-gray-700 sm:col-span-4 sm:mt-0">
+        <span class="flex-grow">Destination</span>
+        <span class="flex-grow">Departure Date</span>
+        <span class="flex-grow">Return Date</span>
       </dd>
     </div>
+
   </dl>
+  <dl class="divide-y-2 divide-gray-100">
+    <% all_flights.each do |flight| %>
+      <div class="px-4 py-6 sm:grid sm:grid-cols-5 sm:gap-4 sm:px-0">
+        <dt class="text-sm font-normal leading-6 text-gray-900"><%= flight["origin"] %></dt>
+        <dd class="mt-1 flex font-normal text-sm leading-6 text-gray-700 sm:col-span-4 sm:mt-0">
+          <span class="flex-grow"><%= flight["destination"] %></span>
+          <span class="flex-grow"><%= flight["departure_date"] %></span>
+          <span class="flex-grow"><%= flight["return_date"] %></span>
+        </dd>
+      </div>
+    <% end %>
+  </dl>
+
 </div>
