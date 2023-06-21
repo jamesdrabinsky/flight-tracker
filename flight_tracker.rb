@@ -29,10 +29,11 @@ helpers do
   def airport_options
     connection = PG.connect(dbname: "flights")
     sql = <<~SQL
-      SELECT country_city_airport 
+      SELECT id, city_country_airport
       FROM airports
       WHERE name is NOT NULL 
-      ORDER BY country, city, name;
+      AND iata_code IS NOT NULL
+      ORDER BY city, country, name;
     SQL
     connection.exec(sql)
   end
@@ -109,18 +110,37 @@ def validate_flight(params)
   session.delete(:error) if session[:error].empty?
 end
 
-def create_new_flight(origin, destination, departure_date, return_date, user_id)
+def create_new_flight(origin_id, destination_id, departure_date, return_date, user_id)
   sql = <<~SQL
-    INSERT INTO flights (origin, destination, departure_date, return_date, user_id) 
+    INSERT INTO flights (origin_id, destination_id, departure_date, return_date, user_id) 
     VALUES ($1, $2, $3, $4, $5)
   SQL
   connection = PG.connect(dbname: "flights")
-  p connection.exec_params(sql, [origin, destination, departure_date, return_date, user_id])
+  connection.exec_params(sql, [origin_id, destination_id, departure_date, return_date, user_id])
 end
 
 def all_flights
   connection = PG.connect(dbname: "flights")
-  connection.exec_params("SELECT * FROM flights WHERE user_id = $1", [session[:user_id]])
+  sql = <<~SQL
+    WITH flight_info AS (
+      SELECT 
+        ARRAY_AGG(a.city_country_airport) arr,
+        TO_CHAR(f.departure_date, 'MM-DD-YYYY') departure_date, 
+        TO_CHAR(f.return_date, 'MM-DD-YYYY') return_date
+      FROM flights f
+      INNER JOIN airports a ON a.id IN (f.origin_id, f.destination_id) 
+      WHERE f.user_id = $1
+      GROUP BY f.id
+    )
+    SELECT
+      arr[1] origin,
+      arr[2] destination,
+      departure_date,
+      return_date
+    FROM flight_info;
+  SQL
+
+  connection.exec_params(sql, [session[:user_id]])
 end
 
 get "/" do 
@@ -171,19 +191,19 @@ post "/register" do
   end
 end
 
-get "/flight/new" do 
-  erb :new_flight, layout: :layout
-end
-
-post "/flight/new" do 
+post "/flights" do 
   validate_flight(params)
 
   if session[:error]
     status 422
-    erb :new_flight, layout: :layout
+    erb :index, layout: :layout
   else
     create_new_flight(*params.values, session[:user_id])
-    session[:success] = "The list has been created."
+    session[:success] = "A new flight has been created"
     redirect "/"
   end
+end
+
+get "flights/:id/" do 
+  erb :flight, layout: :layout
 end
