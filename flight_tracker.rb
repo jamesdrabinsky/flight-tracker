@@ -26,21 +26,35 @@ helpers do
     erb :flash_error_message
   end
 
-  def airport_options
-    connection = PG.connect(dbname: "flights")
+  def all_airports
     sql = <<~SQL
-      SELECT id, city_country_airport
+      SELECT 
+        id, 
+        city_country_airport, 
+        name_iata_code
       FROM airports
       WHERE name is NOT NULL 
       AND iata_code IS NOT NULL
       ORDER BY city, country, name;
     SQL
-    connection.exec(sql)
-  end
 
-  def flight_dates
-    [Date.today, Date.today + 1].map { |d| d.strftime('%Y-%m-%d') }
+    result = query(sql)
+
+    result.map do |tuple|
+      { id: tuple["id"],
+        city_country_airport: tuple["city_country_airport"],
+        name_iata_code: tuple["name_iata_code"] }
+    end
   end
+end
+
+def database_connection
+  PG.connect(dbname: "flights")
+end
+
+def query(statement, *params)
+  db = database_connection
+  db.exec_params(statement, params)
 end
 
 def require_signed_in_user
@@ -50,17 +64,15 @@ def require_signed_in_user
   end
 end
 
-def hash_passwords
-  connection = PG.connect(dbname: "flights")
-  passwords = connection.exec("SELECT password FROM users;").map { |tuple| tuple["password"] }
-  hashed_passwords = passwords.map { |pass| BCrypt::Password.create(pass) }
-  connection.exec("UPDATE users SET password = '#{hashed_passwords[0]} WHERE id = 1;")
-  connection.exec("UPDATE users SET password = '#{hashed_passwords[1]}' WHERE id = 2;")
-end
+# def hash_passwords
+#   passwords = query("SELECT password FROM users;").map { |tuple| tuple["password"] }
+#   hashed_passwords = passwords.map { |pass| BCrypt::Password.create(pass) }
+#   connection.exec("UPDATE users SET password = '#{hashed_passwords[0]} WHERE id = 1;")
+#   connection.exec("UPDATE users SET password = '#{hashed_passwords[1]}' WHERE id = 2;")
+# end
 
 def load_user_credentials(username)
-  connection = PG.connect(dbname: "flights")
-  result = connection.exec_params("SELECT * FROM users WHERE username = $1", [username])
+  result = query("SELECT * FROM users WHERE username = $1", username)
   tuple = result.first || {}
   
   { user_id: tuple.fetch("id", nil),
@@ -90,60 +102,63 @@ end
 def create_new_user(first_name, last_name, username, password)
   hashed_password = BCrypt::Password.create(password)
 
-  connection = PG.connect(dbname: "flights")
   sql = "INSERT INTO users (first_name, last_name, username, password) VALUES ($1, $2, $3, $4)"
-  connection.exec_params(sql, [first_name, last_name, username, hashed_password])
+  query(sql, first_name, last_name, username, hashed_password)
 end
 
 def validate_flight(params)
-  origin, destination, departure_string, return_string = params.values
-  departure_date, return_date = [departure_string, return_string].map { |d| Date.strptime(d, "%Y-%m-%d") }
+  origin, destination, date_string = params.values
+  date = Date.strptime(date_string, "%Y-%m-%d") 
   session[:error] = []
 
   session[:error] << "Origin or destination cannot be empty" if origin.empty? || destination.empty?
   session[:error] << "Origin and destination values cannot be the same" if origin == destination
-  if !departure_string =~ /\d{4}\/\d{2}\/\d{2}/ || !return_string =~ /\d{4}\/\d{2}\/\d{2}/
-    session[:error] << "Departure and return dates can only contain numeric characters (mm/dd/yyyy)"
-  end
-  session[:error] << "Return date must be on the same day or after the departure date" if return_date < departure_date
+  session[:error] << "Date can only contain numeric characters (mm/dd/yyyy)" unless date_string =~ /\d{4}-\d{2}-\d{2}/
+  # session[:error] << "Return date must be on the same day or after the departure date" if return_date < departure_date
 
   session.delete(:error) if session[:error].empty?
 end
 
-def create_new_flight(origin_id, destination_id, departure_date, return_date, user_id)
+def create_new_flight(origin, destination, date, user_id)
   sql = <<~SQL
-    INSERT INTO flights (origin_id, destination_id, departure_date, return_date, user_id) 
-    VALUES ($1, $2, $3, $4, $5)
+    INSERT INTO flights (origin, destination, date, user_id) 
+    VALUES ($1, $2, $3, $4)
   SQL
-  connection = PG.connect(dbname: "flights")
-  connection.exec_params(sql, [origin_id, destination_id, departure_date, return_date, user_id])
+
+  query(sql, origin, destination, date, user_id)
 end
 
-def all_flights
-  connection = PG.connect(dbname: "flights")
+def all_flights(user_id)
   sql = <<~SQL
-    WITH flight_info AS (
-      SELECT 
-        ARRAY_AGG(a.city_country_airport) arr,
-        TO_CHAR(f.departure_date, 'MM-DD-YYYY') departure_date, 
-        TO_CHAR(f.return_date, 'MM-DD-YYYY') return_date
-      FROM flights f
-      INNER JOIN airports a ON a.id IN (f.origin_id, f.destination_id) 
-      WHERE f.user_id = $1
-      GROUP BY f.id
-    )
-    SELECT
-      arr[1] origin,
-      arr[2] destination,
-      departure_date,
-      return_date
-    FROM flight_info;
+    SELECT 
+      id,
+      origin,
+      destination,
+      f.date
+    FROM flights f
+    WHERE user_id = $1;
   SQL
 
-  connection.exec_params(sql, [session[:user_id]])
+  result = query(sql, user_id)
+
+  result.map do |tuple|
+    { id: tuple["id"],
+      origin: tuple["origin"],
+      destination: tuple["destination"],
+      date: tuple["date"] }
+  end
+end
+
+def load_flight(flight_id)
+  sql = "SELECT * FROM flights WHERE id = $1"
+  connection = PG.connect(dbname: "flights")
+  connection.exec_params(sql, [flight_id])
 end
 
 get "/" do 
+  @airports = all_airports
+  @today = Date.today.strftime('%Y-%m-%d')
+  @flights = all_flights(session[:user_id])
   erb :index, layout: :layout
 end
 
@@ -204,6 +219,9 @@ post "/flights" do
   end
 end
 
-get "flights/:id/" do 
+# View a single flight
+get "/flights/:id" do 
+  @flight_id = params[:id]
+  @flight = load_flight(@flight_id)
   erb :flight, layout: :layout
 end
