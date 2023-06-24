@@ -46,6 +46,17 @@ helpers do
         name_iata_code: tuple["name_iata_code"] }
     end
   end
+
+  def full_airport_name(abbreviated_name)
+    sql = <<~SQL
+      SELECT city_country_airport
+      FROM airports 
+      WHERE name_iata_code = $1;
+    SQL
+
+    result = query(sql, abbreviated_name)
+    result.first["city_country_airport"] if result.ntuples > 0
+  end
 end
 
 def database_connection
@@ -89,14 +100,16 @@ end
 
 def validate_registration(params)
   first_name, last_name, username, password = params.values.map(&:strip)
-  session[:error] = []
 
-  session[:error] << "First names can only contain alpha characters" if !(first_name =~ /^[a-z]+$/i)
-  session[:error] << "Last names must contain alpha characters and an optional '-' or space" if !(last_name =~ /^[a-z]+( |-)?[a-z]*$/i)
-  session[:error] << "Username can only contain alpha and numeric characters" if !(username =~ /^[a-z0-9]+$/i)
-  session[:error] << "Password can only contain alpha and numeric characters and must be at least 6 characters" if !(password =~ /^[a-z0-9]{6,}$/i)
-
-  session.delete(:error) if session[:error].empty?
+  if !(first_name =~ /^[a-z]+$/i)
+    session[:error] = "First names can only contain alpha characters"
+  elsif !(last_name =~ /^[a-z]+( |-)?[a-z]*$/i)
+    session[:error] = "Last names must contain alpha characters and an optional '-' or space"
+  elsif !(username =~ /^[a-z0-9]+$/i)
+    session[:error] = "Username can only contain alpha and numeric characters"
+  elsif !(password =~ /^[a-z0-9]{6,}$/i)
+    session[:error] = "Password can only contain alpha and numeric characters and must be at least 6 characters"
+  end
 end
 
 def create_new_user(first_name, last_name, username, password)
@@ -109,14 +122,22 @@ end
 def validate_flight(params)
   origin, destination, date_string = params.values
   date = Date.strptime(date_string, "%Y-%m-%d") 
-  session[:error] = []
 
-  session[:error] << "Origin or destination cannot be empty" if origin.empty? || destination.empty?
-  session[:error] << "Origin and destination values cannot be the same" if origin == destination
-  session[:error] << "Date can only contain numeric characters (mm/dd/yyyy)" unless date_string =~ /\d{4}-\d{2}-\d{2}/
-  # session[:error] << "Return date must be on the same day or after the departure date" if return_date < departure_date
+  if origin == 'Select an origin' || destination == 'Select a destination'
+    session[:error] = "Select values for the origin and destination"
+  elsif origin == destination
+    session[:error] = "Origin and destination cannot be the same"
+  elsif !(date_string =~ /\d{4}-\d{2}-\d{2}/)
+    session[:error] = "Date can only contain numeric characters (mm/dd/yyyy)"
+  elsif !flight_unique?(params, session[:user_id])
+    session[:error] = "Flight origin, destination and date must be unique"
+  end
+end
 
-  session.delete(:error) if session[:error].empty?
+def flight_unique?(params, user_id)
+  all_flights(user_id).none? do |flight|
+    flight.values_at(:origin, :destination, :date) == params.values
+  end
 end
 
 def create_new_flight(origin, destination, date, user_id)
@@ -134,8 +155,8 @@ def all_flights(user_id)
       id,
       origin,
       destination,
-      f.date
-    FROM flights f
+      date
+    FROM flights 
     WHERE user_id = $1;
   SQL
 
@@ -151,15 +172,20 @@ end
 
 def load_flight(flight_id)
   sql = "SELECT * FROM flights WHERE id = $1"
-  connection = PG.connect(dbname: "flights")
-  connection.exec_params(sql, [flight_id])
+  result = query(sql, flight_id)
+  result.first.transform_keys(&:to_sym)
 end
 
-get "/" do 
-  @airports = all_airports
-  @today = Date.today.strftime('%Y-%m-%d')
-  @flights = all_flights(session[:user_id])
-  erb :index, layout: :layout
+def update_flight(origin, destination, date, flight_id)
+  sql = <<~SQL
+    UPDATE flights
+    SET origin = $1,
+        destination = $2,
+        date = $3
+    WHERE id = $4
+  SQL
+
+  query(sql, origin, destination, date, flight_id)
 end
 
 # Login form
@@ -206,8 +232,24 @@ post "/register" do
   end
 end
 
+get "/" do
+  redirect "/flights"
+end
+
+# View all flights
+get "/flights" do 
+  @airports = all_airports
+  @today = Date.today.strftime('%Y-%m-%d')
+  @flights = all_flights(session[:user_id])
+  erb :index, layout: :layout
+end
+
 post "/flights" do 
   validate_flight(params)
+
+  @airports = all_airports
+  @today = Date.today.strftime('%Y-%m-%d')
+  @flights = all_flights(session[:user_id])
 
   if session[:error]
     status 422
@@ -219,9 +261,31 @@ post "/flights" do
   end
 end
 
-# View a single flight
-get "/flights/:id" do 
-  @flight_id = params[:id]
-  @flight = load_flight(@flight_id)
+# Edit an existing flight
+get "/flights/:id/edit" do
+  @airports = all_airports
+  @today = Date.today.strftime('%Y-%m-%d')
+  id = params[:id].to_i
+  @flight = load_flight(id)
+
   erb :flight, layout: :layout
+end
+
+# Update an existing flight
+post "/flights/:id" do
+  validate_flight(params)
+
+  @airports = all_airports
+  @today = Date.today.strftime('%Y-%m-%d')
+  id = params[:id].to_i
+  @flight = load_flight(id)
+
+  if session[:error]
+    status 422
+    erb :flight, layout: :layout
+  else
+    update_flight(*params.values_at(:origin, :destination, :date), id)
+    session[:success] = "The flight has been updated"
+    redirect "/flights/#{id}/edit"
+  end
 end

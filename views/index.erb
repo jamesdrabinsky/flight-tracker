@@ -2,6 +2,7 @@
   <div class="sm:flex sm:items-center">
     <div class="sm:flex-auto">
       <h1 class="text-base font-semibold leading-6 text-gray-900">Flight Information</h1>
+      <p class="mt-2 text-sm text-gray-700">Select from the options below to create a new flight</p>
     </div>
   </div>
 
@@ -14,7 +15,6 @@
               <th scope="col" class="py-3.5 pl-4 pr-3 text-left text-sm font-semibold text-gray-900 sm:pl-0">Origin</th>
               <th scope="col" class="px-3 py-3.5 text-left text-sm font-semibold text-gray-900">Destination</th>
               <th scope="col" class="px-3 py-3.5 text-left text-sm font-semibold text-gray-900">Date</th>
-              <th scope="col" class="px-3 py-3.5 text-left text-sm font-semibold text-gray-900">Round Trip?</th>
               <th scope="col" class="relative py-3.5 pl-3 pr-4 sm:pr-0">
                 <span class="sr-only">Edit</span>
               </th>
@@ -24,27 +24,25 @@
             <form action="/flights" method="POST">
               <tr>
                 <td class="whitespace-nowrap py-8 px-2 text-sm text-gray-500 sm:pl-0">
-                  <select id="origin" name="origin" class="block w-64 rounded-md border-0 py-1.5 text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 focus:ring-2 focus:ring-inset focus:ring-indigo-600 sm:max-w-xs sm:text-sm sm:leading-6">
-                    <option value=""> <%= 'Select an origin' %> </option>
+                  <select id="origin" name="origin" required class="block w-64 rounded-md border-0 py-1.5 text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 focus:ring-2 focus:ring-inset focus:ring-indigo-600 sm:max-w-xs sm:text-sm sm:leading-6">
+                    <option value="<%= params[:origin] || 'Select an origin' %>"> <%= full_airport_name(params[:origin]) || 'Select an origin' %> </option>
                     <% @airports.each do |airport| %>
                       <option value="<%= airport[:name_iata_code] %>"><%= airport[:city_country_airport] %></option>
                     <% end %>
                   </select>
                 </td>
                 <td class="whitespace-nowrap px-2 py-8 text-sm text-gray-500">
-                  <select id="destination" name="destination" class="block w-64 rounded-md border-0 py-1.5 text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 focus:ring-2 focus:ring-inset focus:ring-indigo-600 sm:max-w-xs sm:text-sm sm:leading-6">
-                    <option value=""> <%= 'Select a destination' %> </option>
+                  <select id="destination" name="destination" required class="block w-64 rounded-md border-0 py-1.5 text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 focus:ring-2 focus:ring-inset focus:ring-indigo-600 sm:max-w-xs sm:text-sm sm:leading-6">
+                    <option value="<%= params[:destination] || 'Select a destination' %>"> <%= full_airport_name(params[:destination]) || 'Select a destination' %> </option>
                     <% @airports.each do |airport| %>
                       <option value="<%= airport[:name_iata_code] %>"><%= airport[:city_country_airport] %></option>
                     <% end %>
                   </select>
                 </td>
                 <td class="whitespace-nowrap px-2 py-8 text-sm text-gray-500">
-                  <input type="date" id="date" name="date" value=<%= params[:date] || @today %> class="block w-min rounded-md border-0 py-1.5 text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 focus:ring-2 focus:ring-inset focus:ring-indigo-600 sm:max-w-xs sm:text-sm sm:leading-6">
+                  <input type="date" id="date" name="date" min="<%= @today %>" value=<%= params[:date] || @today %> class="block w-min rounded-md border-0 py-1.5 text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 focus:ring-2 focus:ring-inset focus:ring-indigo-600 sm:max-w-xs sm:text-sm sm:leading-6">
                 </td>
-                <td class="whitespace-nowrap px-2 py-8 text-sm text-gray-500">
-                  <input id="round_trip" aria-describedby="round_trip" name="round_trip" type="checkbox" class="relative h-5 w-5 rounded border-gray-300 text-indigo-600 focus:ring-indigo-600">
-                </td>
+                <td></td>
                 <td class="float-right py-8 flex flex-col items-center relative whitespace-nowrap py-4 pl-3 pr-4 text-right text-sm font-medium sm:pr-0">
                   <button type="submit" class="block rounded-md bg-indigo-600 px-3 py-2 text-center text-sm font-semibold text-white shadow-sm hover:bg-indigo-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600">
                     Add Flight
@@ -63,7 +61,7 @@
                 </td>
                 <td class="relative whitespace-nowrap py-4 pl-3 pr-4 text-right text-sm font-medium sm:pr-0">
                   <button type="submit" class="rounded-md bg-indigo-600 px-3 py-2 text-center text-xs font-semibold text-white shadow-sm hover:bg-indigo-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600">
-                    <a href="/flights/<%= flight[:id] %>">Update</a>
+                    <a href="/flights/<%= flight[:id] %>/edit">Edit</a>
                   </button>
                     <span class="text-gray-200" aria-hidden="true">|</span>
                   <button type="submit" class="rounded-md bg-indigo-600 px-3 py-2 text-center text-xs font-semibold text-white shadow-sm hover:bg-indigo-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600">Remove</button>
