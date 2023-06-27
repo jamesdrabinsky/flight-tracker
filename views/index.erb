@@ -60,11 +60,13 @@
                   <span class="sr-only">Round Trip</span>
                 </td>
                 <td class="relative whitespace-nowrap py-4 pl-3 pr-4 text-right text-sm font-medium sm:pr-0">
-                  <button type="submit" class="rounded-md bg-indigo-600 px-3 py-2 text-center text-xs font-semibold text-white shadow-sm hover:bg-indigo-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600">
+                  <button type="button" class="rounded-md bg-indigo-600 px-3 py-2 text-center text-xs font-semibold text-white shadow-sm hover:bg-indigo-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600">
                     <a href="/flights/<%= flight[:id] %>/edit">Edit</a>
-                  </button>
-                    <span class="text-gray-200" aria-hidden="true">|</span>
-                  <button type="submit" class="rounded-md bg-indigo-600 px-3 py-2 text-center text-xs font-semibold text-white shadow-sm hover:bg-indigo-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600">Remove</button>
+                    </button>
+                      <span class="text-gray-200" aria-hidden="true">|</span>
+                    <form action="/flights/<%= flight[:id] %>/destroy" method="POST" class="inline-block">
+                      <button type="submit" class="rounded-md bg-indigo-600 px-3 py-2 text-center text-xs font-semibold text-white shadow-sm hover:bg-indigo-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600">Remove</button>
+                    </form>
                 </td>
               </tr>
             <% end %>

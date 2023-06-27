@@ -136,14 +136,16 @@ end
 
 def flight_unique?(params, user_id)
   all_flights(user_id).none? do |flight|
-    flight.values_at(:origin, :destination, :date) == params.values
+    flight_values = flight.values_at(:origin, :destination, :date)
+    param_values = params.values_at(:origin, :destination, :date)
+    flight_values == param_values && flight[:id] != params[:id]
   end
 end
 
 def create_new_flight(origin, destination, date, user_id)
   sql = <<~SQL
-    INSERT INTO flights (origin, destination, date, user_id) 
-    VALUES ($1, $2, $3, $4)
+    INSERT INTO flights (origin, destination, date, code, user_id) 
+    VALUES ($1, $2, $3, flight_code($1, $2, $3), $4)
   SQL
 
   query(sql, origin, destination, date, user_id)
@@ -151,11 +153,7 @@ end
 
 def all_flights(user_id)
   sql = <<~SQL
-    SELECT 
-      id,
-      origin,
-      destination,
-      date
+    SELECT *
     FROM flights 
     WHERE user_id = $1;
   SQL
@@ -166,7 +164,8 @@ def all_flights(user_id)
     { id: tuple["id"],
       origin: tuple["origin"],
       destination: tuple["destination"],
-      date: tuple["date"] }
+      date: tuple["date"],
+      code: tuple["code"] }
   end
 end
 
@@ -181,11 +180,85 @@ def update_flight(origin, destination, date, flight_id)
     UPDATE flights
     SET origin = $1,
         destination = $2,
-        date = $3
+        date = $3,
+        code = flight_code($1, $2, $3)
     WHERE id = $4
   SQL
 
   query(sql, origin, destination, date, flight_id)
+end
+
+def delete_flight(flight_id)
+  sql = "DELETE FROM flights WHERE id = $1;"
+  query(sql, flight_id)
+end
+
+def create_new_ticket(ticket_class, seat, traveler, bags, flight_id)
+  sql = <<~SQL
+    INSERT INTO tickets (class, seat, traveler, bags, code, flight_id) 
+    VALUES ($1, $2, $3, $4, ticket_code($5), $5);
+  SQL
+  query(sql, ticket_class, seat, traveler, bags, flight_id)
+end
+
+def validate_ticket(ticket_class, seat, traveler, bags, flight_id)
+  origin, destination, date_string = params.values
+  date = Date.strptime(date_string, "%Y-%m-%d") 
+
+  if origin == 'Select an origin' || destination == 'Select a destination'
+    session[:error] = "Select values for the origin and destination"
+  elsif origin == destination
+    session[:error] = "Origin and destination cannot be the same"
+  elsif !(date_string =~ /\d{4}-\d{2}-\d{2}/)
+    session[:error] = "Date can only contain numeric characters (mm/dd/yyyy)"
+  elsif !flight_unique?(params, session[:user_id])
+    session[:error] = "Flight origin, destination and date must be unique"
+  end
+end
+
+def ticket_limit?(flight_id)
+  sql = "SELECT COUNT(id) FROM tickets WHERE flight_id = $1"
+  result = query(sql, flight_id)
+  result.first["count"] == 4
+end
+
+def find_tickets_for_flight(flight_id)
+  sql = "SELECT * FROM tickets WHERE flight_id = $1"
+  result = query(sql, flight_id)
+  
+  result.map do |tuple|
+    { id: tuple["id"].to_i,
+      class: tuple["class"],
+      seat: tuple["seat"],
+      traveler: tuple["traveler"],
+      bags: tuple["bags"].to_i,
+      code: tuple["code"] }
+    
+  end
+end
+
+def load_ticket(ticket_id)
+  sql = "SELECT * FROM tickets WHERE id = $1"
+  result = query(sql, ticket_id)
+  result.first.transform_keys(&:to_sym)
+end
+
+def update_ticket(ticket_class, seat, traveler, bags, ticket_id)
+  sql = <<~SQL
+    UPDATE tickets
+    SET class = $1,
+        seat = $2,
+        traveler = $3,
+        bags = $4
+    WHERE id = $5
+  SQL
+
+  query(sql, ticket_class, seat, traveler, bags, ticket_id)
+end
+
+def delete_ticket(ticket_id)
+  sql = "DELETE FROM tickets WHERE id = $1;"
+  query(sql, ticket_id)
 end
 
 # Login form
@@ -244,7 +317,8 @@ get "/flights" do
   erb :index, layout: :layout
 end
 
-post "/flights" do 
+# Create a new flight
+post "/flights" do   
   validate_flight(params)
 
   @airports = all_airports
@@ -267,6 +341,7 @@ get "/flights/:id/edit" do
   @today = Date.today.strftime('%Y-%m-%d')
   id = params[:id].to_i
   @flight = load_flight(id)
+  @tickets = find_tickets_for_flight(id)
 
   erb :flight, layout: :layout
 end
@@ -287,5 +362,72 @@ post "/flights/:id" do
     update_flight(*params.values_at(:origin, :destination, :date), id)
     session[:success] = "The flight has been updated"
     redirect "/flights/#{id}/edit"
+  end
+end
+
+# Delete a flight
+post "/flights/:id/destroy" do
+  id = params[:id].to_i
+  delete_flight(id)
+
+  session[:success] = "The flight has been deleted."
+  if env["HTTP_X_REQUESTED_WITH"] == "XMLHttpRequest"
+    "/flights"
+  else
+    redirect "/flights"
+  end
+end
+
+# Add a new ticket to a flight
+post "/flights/:id/tickets" do
+
+  # validate_ticket()
+  @flight_id = params[:id].to_i
+  @flight = load_flight(@flight_id)
+
+  select_params = params.values_at(:class, :seat, :traveler, :bags, :id)
+
+  if session[:error]
+    status 422
+    erb :flight, layout: :layout
+  else
+    create_new_ticket(*select_params)
+    session[:success] = "A new ticket has been created"
+    redirect "/flights/#{@flight_id}/edit"
+  end
+end
+
+# Edit an existing ticket
+get "/flights/:flight_id/tickets/:id/edit" do 
+  @flight_id = params[:flight_id].to_i
+  @id = params[:id].to_i
+  @ticket = load_ticket(@id)
+
+  erb :ticket, layout: :layout
+end
+
+
+# Update an existing ticket
+post "/flights/:flight_id/tickets/:id" do
+  @flight_id = params[:flight_id].to_i
+  id = params[:id].to_i
+  @ticket = load_ticket(id)
+
+  update_ticket(*params.values_at(:class, :seat, :traveler, :bags), id)
+  session[:success] = "The ticket has been updated"
+  redirect "/flights/#{@flight_id}/tickets/#{id}/edit"
+end
+
+# Delete a ticket
+post "/flights/:flight_id/tickets/:id/destroy" do
+  @flight_id = params[:flight_id].to_i
+  id = params[:id].to_i
+  delete_ticket(id)
+
+  session[:success] = "The ticket has been deleted."
+  if env["HTTP_X_REQUESTED_WITH"] == "XMLHttpRequest"
+    "/flights/#{@flight_id}/edit"
+  else
+    redirect "/flights/#{@flight_id}/edit"
   end
 end

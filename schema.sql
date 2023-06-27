@@ -77,6 +77,13 @@ SELECT
   f.return_date
 FROM flights f;
 
+SELECT 
+  (SELECT a.iata_code FROM airports a WHERE a.id = f.origin_id) origin,
+  (SELECT a.iata_code FROM airports a WHERE a.id = f.destination_id) destination,
+  f.date,
+  f.user_id
+FROM flights_test f;
+
 WITH flight_info AS (
   SELECT 
     ARRAY_AGG(a.iata_code) arr,
@@ -96,14 +103,40 @@ FROM flight_info;
 
 ------------------------------------------------
 
--- CREATE TABLE flights (
+CREATE TABLE flights (
+    id serial PRIMARY KEY,
+    origin text NOT NULL,
+    destination text NOT NULL,
+    date date NOT NULL,
+    created_on timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    code text NOT NULL,
+    user_id integer NOT NULL REFERENCES users(id) ON DELETE CASCADE
+);
+
+-- CREATE TABLE flights_test (
 --     id serial PRIMARY KEY,
---     origin text NOT NULL,
---     destination text NOT NULL,
+--     origin_id integer NOT NULL,
+--     destination_id integer NOT NULL,
 --     date date NOT NULL,
 --     created_on timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
 --     user_id integer NOT NULL REFERENCES users(id) ON DELETE CASCADE
 -- );
+
+-- CREATE TABLE flights_test AS (
+--   SELECT 
+--     (SELECT a.id FROM airports a WHERE a.name_iata_code = f.origin) origin_id,
+--     (SELECT a.id FROM airports a WHERE a.name_iata_code = f.destination) destination_id,
+--     f.date,
+--     f.user_id
+--     FROM flights f
+-- );
+
+-- SELECT 
+--   (SELECT a.iata_code FROM airports a WHERE a.id = f.origin_id),
+--   (SELECT a.iata_code FROM airports a WHERE a.id = f.destination_id),
+--   f.departure_date,
+--   f.return_date
+-- FROM flights f;
 
 -- CREATE TABLE flights (
 --     id serial PRIMARY KEY,
@@ -114,13 +147,14 @@ FROM flight_info;
 
 ALTER SEQUENCE flights_id_seq RESTART WITH 1;
 
-CREATE TABLE tickets (
-  id serial PRIMARY KEY,
-  class text NOT NULL,
-  traveler text NOT NULL,
-  bags integer NOT NULL,
-  flight_id integer REFERENCES flights(id) ON DELETE CASCADE
-)
+-- CREATE TABLE tickets (
+--   id serial PRIMARY KEY,
+--   class text NOT NULL,
+--   traveler text NOT NULL,
+--   bags integer NOT NULL,
+--   code text NOT NULL,
+--   flight_id integer NOT NULL REFERENCES flights(id) ON DELETE CASCADE
+-- );
 
 ------------------------------------------------
 CREATE TYPE flight_type AS ENUM ('origin', 'destination');
@@ -131,6 +165,22 @@ CREATE TABLE airports_flights (
   flight_id integer NOT NULL REFERENCES flights(id) ON DELETE CASCADE,
   category flight_type NOT NULL,
   UNIQUE(airport_id, flight_id)
+);
+
+------------------------------------------------
+CREATE TYPE ticket_class_enum AS ENUM ('Economy', 'Premium Economy', 'Business Class', 'First Class');
+CREATE TYPE ticket_seat_enum AS ENUM ('Window', 'Middle', 'Aisle');
+CREATE TYPE ticket_traveler_enum AS ENUM ('Adult', 'Child', 'Infant');
+-- CREATE TYPE ticket_bags_enum AS ENUM (0, 1);
+
+CREATE TABLE tickets (
+  id serial PRIMARY KEY,
+  class ticket_class_enum NOT NULL,
+  seat ticket_seat_enum NOT NULL,
+  traveler ticket_traveler_enum NOT NULL,
+  bags integer NOT NULL,
+  code text NOT NULL,
+  flight_id integer REFERENCES flights(id) ON DELETE CASCADE
 );
 
 ------------------------------------------------
@@ -155,3 +205,31 @@ CREATE TABLE airports_flights (
 -- FROM airports_flights af 
 -- INNER JOIN airports a ON a.id = af.airport_id
 -- GROUP BY af.flight_id;
+
+------------------------------------------------
+
+SELECT 
+  f.*,
+  a.city_country_airport,
+  a.name_iata_code,
+  a.lat_decimal,
+  a.lon_decimal
+FROM flights_test f
+INNER JOIN airports a 
+  ON a.id = f.origin_id
+  OR a.id = f.destination_id;
+
+------------------------------------------------
+
+CREATE FUNCTION flight_code (origin text, destination text, date date) RETURNS text
+  AS $$ SELECT SPLIT_PART($1, ' - ', 2) || '-' || SPLIT_PART($2, ' - ', 2) || '-' || REGEXP_REPLACE($3::text, '[-]', '', 'g'); $$
+  LANGUAGE SQL;
+
+CREATE FUNCTION ticket_code (flight_id integer) RETURNS text
+  AS $$
+    WITH flight_info AS (SELECT code FROM flights WHERE flight_id = $1)
+
+    SELECT code || '-' || SUBSTR(md5(RANDOM()::text), 0, 10)
+    FROM flight_info;
+  $$
+  LANGUAGE SQL;
