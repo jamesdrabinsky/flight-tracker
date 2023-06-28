@@ -57,6 +57,24 @@ helpers do
     result = query(sql, abbreviated_name)
     result.first["city_country_airport"] if result.ntuples > 0
   end
+
+  def page_count
+    sql = "SELECT CEIL(COUNT(id)::numeric / 5) page_count FROM flights;"
+    query(sql).first["page_count"].to_i
+  end
+
+  def flight_count
+    all_flights(session[:user_id]).size
+  end
+
+  def pagination_range(page_number)
+    ranges = (1..flight_count).step(5).zip((5..flight_count).step(5))
+    ranges[-1][1] = flight_count
+  
+    ranges.each.with_index(1).with_object([]) do |((first, last), idx), arr|
+      arr << first << last if idx == page_number
+    end
+  end
 end
 
 def database_connection
@@ -155,7 +173,8 @@ def all_flights(user_id)
   sql = <<~SQL
     SELECT *
     FROM flights 
-    WHERE user_id = $1;
+    WHERE user_id = $1
+    ORDER BY date , origin, destination;
   SQL
 
   result = query(sql, user_id)
@@ -261,6 +280,15 @@ def delete_ticket(ticket_id)
   query(sql, ticket_id)
 end
 
+def load_current_page_flights(page_number)
+  flights_groups = all_flights(session[:user_id]).each_slice(5)
+  flights_groups.each.with_index(1).with_object([]) do |(sub_arr, idx), arr|
+    sub_arr.each do |flight|
+      arr << flight if idx == page_number
+    end
+  end  
+end
+
 # Login form
 get "/users/signin" do
   erb :signin, layout: :layout
@@ -306,14 +334,16 @@ post "/register" do
 end
 
 get "/" do
-  redirect "/flights"
+  redirect "/flights?page=1"
 end
 
 # View all flights
 get "/flights" do 
   @airports = all_airports
   @today = Date.today.strftime('%Y-%m-%d')
-  @flights = all_flights(session[:user_id])
+  @page_number = params[:page].to_i
+  @flights = load_current_page_flights(@page_number)
+
   erb :index, layout: :layout
 end
 
@@ -323,7 +353,8 @@ post "/flights" do
 
   @airports = all_airports
   @today = Date.today.strftime('%Y-%m-%d')
-  @flights = all_flights(session[:user_id])
+  @page_number = 1
+  @flights = load_current_page_flights(@page_number)
 
   if session[:error]
     status 422
@@ -372,9 +403,9 @@ post "/flights/:id/destroy" do
 
   session[:success] = "The flight has been deleted."
   if env["HTTP_X_REQUESTED_WITH"] == "XMLHttpRequest"
-    "/flights"
+    "/"
   else
-    redirect "/flights"
+    redirect "/"
   end
 end
 
