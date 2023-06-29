@@ -8,7 +8,7 @@
       <div>
         <label for="first_name" class="block text-sm font-medium leading-6 text-gray-900">First Name</label>
         <div class="mt-2">
-          <input id="first_name" name="first_name" type="text" autocomplete="text" required 
+          <input id="first_name" name="first_name" type="text" autocomplete="text" value="<%= params[:first_name] %>" required 
           class="block w-full rounded-md border-0 py-1.5 text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 placeholder:text-gray-400 focus:ring-2 focus:ring-inset focus:ring-indigo-600 sm:text-sm sm:leading-6">
         </div>
       </div>
@@ -16,7 +16,7 @@
       <div>
         <label for="last_name" class="block text-sm font-medium leading-6 text-gray-900">Last Name</label>
         <div class="mt-2">
-          <input id="last_name" name="last_name" type="text" autocomplete="text" required 
+          <input id="last_name" name="last_name" type="text" autocomplete="text" value="<%= params[:last_name] %>" required 
           class="block w-full rounded-md border-0 py-1.5 text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 placeholder:text-gray-400 focus:ring-2 focus:ring-inset focus:ring-indigo-600 sm:text-sm sm:leading-6">
         </div>
       </div>
@@ -24,7 +24,7 @@
       <div>
         <label for="email" class="block text-sm font-medium leading-6 text-gray-900">Username</label>
         <div class="mt-2">
-          <input id="username" name="username" type="text" autocomplete="text" required class="block w-full rounded-md border-0 py-1.5 text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 placeholder:text-gray-400 focus:ring-2 focus:ring-inset focus:ring-indigo-600 sm:text-sm sm:leading-6">
+          <input id="username" name="username" type="text" autocomplete="text" value="<%= params[:username] %>" required class="block w-full rounded-md border-0 py-1.5 text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 placeholder:text-gray-400 focus:ring-2 focus:ring-inset focus:ring-indigo-600 sm:text-sm sm:leading-6">
         </div>
       </div>
 

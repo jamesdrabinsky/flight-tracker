@@ -59,8 +59,13 @@ helpers do
   end
 
   def page_count
-    sql = "SELECT CEIL(COUNT(id)::numeric / 5) page_count FROM flights;"
-    query(sql).first["page_count"].to_i
+    sql = <<~SQL
+      SELECT CEIL(COUNT(id)::numeric / 5) page_count 
+      FROM flights 
+      WHERE user_id = $1;
+    SQL
+
+    query(sql, session[:user_id]).first["page_count"].to_i
   end
 
   def flight_count
@@ -69,11 +74,16 @@ helpers do
 
   def pagination_range(page_number)
     ranges = (1..flight_count).step(5).zip((5..flight_count).step(5))
+    
     ranges[-1][1] = flight_count
-  
+
     ranges.each.with_index(1).with_object([]) do |((first, last), idx), arr|
       arr << first << last if idx == page_number
     end
+  end
+
+  def signin_link(string, text)
+    string.sub(text, %(<u><strong><a href="/users/signin">#{text}</a></strong></u>)) 
   end
 end
 
@@ -88,17 +98,10 @@ end
 
 def require_signed_in_user
   unless session[:username]
-    session[:error] = "You must be signed in to do that."
+    session[:error] = "Must be signed in to perform this action"
     redirect "/"
   end
 end
-
-# def hash_passwords
-#   passwords = query("SELECT password FROM users;").map { |tuple| tuple["password"] }
-#   hashed_passwords = passwords.map { |pass| BCrypt::Password.create(pass) }
-#   connection.exec("UPDATE users SET password = '#{hashed_passwords[0]} WHERE id = 1;")
-#   connection.exec("UPDATE users SET password = '#{hashed_passwords[1]}' WHERE id = 2;")
-# end
 
 def load_user_credentials(username)
   result = query("SELECT * FROM users WHERE username = $1", username)
@@ -118,15 +121,33 @@ end
 
 def validate_registration(params)
   first_name, last_name, username, password = params.values.map(&:strip)
+  session[:error] = []
 
   if !(first_name =~ /^[a-z]+$/i)
-    session[:error] = "First names can only contain alpha characters"
-  elsif !(last_name =~ /^[a-z]+( |-)?[a-z]*$/i)
-    session[:error] = "Last names must contain alpha characters and an optional '-' or space"
-  elsif !(username =~ /^[a-z0-9]+$/i)
-    session[:error] = "Username can only contain alpha and numeric characters"
-  elsif !(password =~ /^[a-z0-9]{6,}$/i)
-    session[:error] = "Password can only contain alpha and numeric characters and must be at least 6 characters"
+    session[:error] << "First names can only contain alpha characters"
+  end
+  if !(last_name =~ /^[a-z]+( |-)?[a-z]*$/i)
+    session[:error] << "Last names must contain alpha characters and an optional '-' or space"
+  end
+  if !(username =~ /^[a-z0-9]+$/i)
+    session[:error] << "Username can only contain alpha and numeric characters"
+  end
+  if !(password =~ /^[a-z0-9]{6,}$/i)
+    session[:error] << "Password can only contain alpha and numeric characters and must be at least 6 characters"
+  end
+  if !username_unique?(username)
+    session[:error] << "The username entered is already in use"
+  end
+
+  session.delete(:error) if session[:error].empty?
+end
+
+def username_unique?(username)
+  sql = "SELECT username FROM users;"
+  usernames = query(sql).field_values("username")
+
+  usernames.none? do |name|
+    name == username
   end
 end
 
@@ -140,16 +161,22 @@ end
 def validate_flight(params)
   origin, destination, date_string = params.values
   date = Date.strptime(date_string, "%Y-%m-%d") 
+  session[:error] = []
 
   if origin == 'Select an origin' || destination == 'Select a destination'
-    session[:error] = "Select values for the origin and destination"
-  elsif origin == destination
-    session[:error] = "Origin and destination cannot be the same"
-  elsif !(date_string =~ /\d{4}-\d{2}-\d{2}/)
-    session[:error] = "Date can only contain numeric characters (mm/dd/yyyy)"
-  elsif !flight_unique?(params, session[:user_id])
-    session[:error] = "Flight origin, destination and date must be unique"
+    session[:error] << "Select values for the origin and destination"
   end
+  if origin == destination
+    session[:error] << "Origin and destination cannot be the same"
+  end
+  if !(date_string =~ /\d{4}-\d{2}-\d{2}/)
+    session[:error] << "Date can only contain numeric characters (mm/dd/yyyy)"
+  end
+  if !flight_unique?(params, session[:user_id])
+    session[:error] << "Flight origin, destination and date must be unique"
+  end
+
+  session.delete(:error) if session[:error].empty?
 end
 
 def flight_unique?(params, user_id)
@@ -281,12 +308,22 @@ def delete_ticket(ticket_id)
 end
 
 def load_current_page_flights(page_number)
-  flights_groups = all_flights(session[:user_id]).each_slice(5)
-  flights_groups.each.with_index(1).with_object([]) do |(sub_arr, idx), arr|
-    sub_arr.each do |flight|
-      arr << flight if idx == page_number
-    end
-  end  
+  sql = <<~SQL 
+    SELECT * 
+    FROM flights 
+    WHERE user_id = $1 
+    LIMIT 5 OFFSET $2
+  SQL
+
+  result = query(sql, session[:user_id], (page_number - 1) * 5)
+  
+  result.map do |tuple|
+    { id: tuple["id"],
+      origin: tuple["origin"],
+      destination: tuple["destination"],
+      date: tuple["date"],
+      code: tuple["code"] }
+  end
 end
 
 # Login form
@@ -334,11 +371,13 @@ post "/register" do
 end
 
 get "/" do
-  redirect "/flights?page=1"
+  redirect "/flights"
 end
 
 # View all flights
 get "/flights" do 
+  params[:page] ||= 1
+
   @airports = all_airports
   @today = Date.today.strftime('%Y-%m-%d')
   @page_number = params[:page].to_i
@@ -349,6 +388,8 @@ end
 
 # Create a new flight
 post "/flights" do   
+  require_signed_in_user
+
   validate_flight(params)
 
   @airports = all_airports
@@ -368,6 +409,8 @@ end
 
 # Edit an existing flight
 get "/flights/:id/edit" do
+  require_signed_in_user
+
   @airports = all_airports
   @today = Date.today.strftime('%Y-%m-%d')
   id = params[:id].to_i
@@ -436,7 +479,6 @@ get "/flights/:flight_id/tickets/:id/edit" do
 
   erb :ticket, layout: :layout
 end
-
 
 # Update an existing ticket
 post "/flights/:flight_id/tickets/:id" do
