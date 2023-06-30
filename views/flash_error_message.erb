@@ -2,7 +2,7 @@
   <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative" role="alert">
     <strong class="font-bold">Error!</strong>
 
-    <% if !session[:username] && request.path_info == '/flights' %>
+    <% if !session[:username] && (request.path_info.scan /[a-z]+/i)[0] == 'flights' %>
       <%== signin_link(session.delete(:error), 'signed in') %>
     <% end %>
 

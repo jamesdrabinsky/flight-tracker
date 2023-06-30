@@ -284,7 +284,7 @@ def find_tickets_for_flight(flight_id)
 end
 
 def load_ticket(ticket_id)
-  sql = "SELECT * FROM tickets WHERE id = $1"
+  sql = "SELECT * FROM tickets WHERE id = $1;"
   result = query(sql, ticket_id)
   result.first.transform_keys(&:to_sym)
 end
@@ -295,7 +295,8 @@ def update_ticket(ticket_class, seat, traveler, bags, ticket_id)
     SET class = $1,
         seat = $2,
         traveler = $3,
-        bags = $4
+        bags = $4,
+        code = ticket_code($5)
     WHERE id = $5
   SQL
 
@@ -326,6 +327,22 @@ def load_current_page_flights(page_number)
   end
 end
 
+def flight_exist?(flight_id)
+  sql = "SELECT * FROM flights WHERE id = $1"
+  result = query(sql, flight_id)
+  result.ntuples > 0
+end
+
+def ticket_exist?(flight_id, ticket_id)
+  sql = "SELECT * FROM tickets WHERE id = $1 AND flight_id = $2"
+  result = query(sql, ticket_id, flight_id)
+  result.ntuples > 0
+end
+
+def page_exist?(page_number)
+  (1..page_count).cover? page_number
+end
+
 # Login form
 get "/users/signin" do
   erb :signin, layout: :layout
@@ -338,7 +355,8 @@ post "/users/signin" do
   if valid_credentials?(username, password)
     session.merge!(load_user_credentials(username))
     session[:success] = "You are signed in"
-    redirect "/"
+    return_path = session.delete(:last_request) || "/"
+    redirect return_path
   else
     session[:error] = "Invalid credentials"
     status 422
@@ -375,12 +393,18 @@ get "/" do
 end
 
 # View all flights
-get "/flights" do 
+get "/flights" do   
+  @page_number = params[:page].to_i
+
+  if !page_exist?(@page_number)
+    session[:error] = "That page does not exist"
+    redirect "/flights?page=1"
+  end
+
   params[:page] ||= 1
 
   @airports = all_airports
   @today = Date.today.strftime('%Y-%m-%d')
-  @page_number = params[:page].to_i
   @flights = load_current_page_flights(@page_number)
 
   erb :index, layout: :layout
@@ -409,15 +433,25 @@ end
 
 # Edit an existing flight
 get "/flights/:id/edit" do
+  session[:last_request] = request.fullpath
   require_signed_in_user
-
-  @airports = all_airports
-  @today = Date.today.strftime('%Y-%m-%d')
   id = params[:id].to_i
-  @flight = load_flight(id)
-  @tickets = find_tickets_for_flight(id)
 
-  erb :flight, layout: :layout
+  if flight_exist?(id)
+    @airports = all_airports
+    @today = Date.today.strftime('%Y-%m-%d')
+    @flight = load_flight(id)
+    @tickets = find_tickets_for_flight(id)
+
+    erb :flight, layout: :layout
+  else
+    session[:error] = "That page does not exist"
+    redirect "/"
+  end
+end
+
+get "/flights/:id" do
+  redirect "/flights/#{params[:id]}/edit"
 end
 
 # Update an existing flight
@@ -473,11 +507,23 @@ end
 
 # Edit an existing ticket
 get "/flights/:flight_id/tickets/:id/edit" do 
-  @flight_id = params[:flight_id].to_i
+  session[:last_request] = request.fullpath
+  require_signed_in_user
   @id = params[:id].to_i
-  @ticket = load_ticket(@id)
+  @flight_id = params[:flight_id].to_i
 
-  erb :ticket, layout: :layout
+  if ticket_exist?(@flight_id, @id)
+    @flight = load_flight(@flight_id)
+    @ticket = load_ticket(@id)
+    erb :ticket, layout: :layout
+  else
+    session[:error] = "That page does not exist"
+    redirect "/"
+  end
+end
+
+get "/flights/:flight_id/tickets/:id" do 
+  redirect "/flights/#{params[:flight_id]}/tickets/#{params[:id]}/edit"
 end
 
 # Update an existing ticket
