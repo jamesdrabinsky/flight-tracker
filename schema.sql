@@ -222,7 +222,9 @@ INNER JOIN airports a
 ------------------------------------------------
 
 CREATE FUNCTION flight_code (origin text, destination text, date date) RETURNS text
-  AS $$ SELECT SPLIT_PART($1, ' - ', 2) || '-' || SPLIT_PART($2, ' - ', 2) || '-' || REGEXP_REPLACE($3::text, '[-]', '', 'g'); $$
+  AS $$ 
+    SELECT SPLIT_PART($1, ' - ', 2) || '-' || SPLIT_PART($2, ' - ', 2) || '-' || REGEXP_REPLACE($3::text, '[-]', '', 'g'); 
+    $$
   LANGUAGE SQL;
 
 CREATE FUNCTION ticket_code (flight_id integer) RETURNS text
@@ -233,3 +235,12 @@ CREATE FUNCTION ticket_code (flight_id integer) RETURNS text
     FROM flight_info;
   $$
   LANGUAGE SQL;
+
+-- CREATE FUNCTION update_ticket_code_after_flight_update(origin text, destination text, date date, flight_id integer) RETURNS text
+--   AS $$
+--     UPDATE tickets
+--     SET code = flight_code($1, $2, $3) || SUBSTRING(code, '-[a-z\d]+$')
+--     WHERE flight_id = $4
+--     RETURNING code as new_code;
+--   $$
+--   LANGUAGE SQL;

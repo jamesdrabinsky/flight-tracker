@@ -1,7 +1,8 @@
 <div class="px-4 sm:px-6 lg:px-8">
   <div class="sm:flex sm:items-center">
     <div class="sm:flex-auto">
-      <h1 class="text-base font-semibold leading-6 text-gray-900">Flight Information</h1>
+      <h1 class="inline-block text-base font-semibold leading-6 text-gray-900">Flight Information</h1>
+      <a href="#" class="float-right text-base font-semibold leading-6 text-indigo-600">Remove All Flights</a>
       <p class="mt-2 text-sm text-gray-700">Select from the options below to create a new flight</p>
     </div>
   </div>
@@ -15,6 +16,7 @@
               <th scope="col" class="py-3.5 pl-4 pr-3 text-left text-sm font-semibold text-gray-900 sm:pl-0">Origin</th>
               <th scope="col" class="px-3 py-3.5 text-left text-sm font-semibold text-gray-900">Destination</th>
               <th scope="col" class="px-3 py-3.5 text-left text-sm font-semibold text-gray-900">Date</th>
+              <th scope="col" class="px-3 py-3.5 text-left text-sm font-semibold text-gray-900">Ticket Count</th>
               <th scope="col" class="relative py-3.5 pl-3 pr-4 sm:pr-0">
                 <span class="sr-only">Edit</span>
               </th>
@@ -56,9 +58,8 @@
                 <td class="whitespace-nowrap py-4 pl-4 pr-3 text-sm text-gray-500 sm:pl-0"><%= flight[:origin] %></td>
                 <td class="whitespace-nowrap px-3 py-4 text-sm text-gray-500"><%= flight[:destination] %></td>
                 <td class="whitespace-nowrap px-3 py-4 text-sm text-gray-500"><%= flight[:date] %></td>
-                <td scope="col" class="relative py-3.5 pl-3 pr-4 sm:pr-0">
-                  <span class="sr-only">Round Trip</span>
-                </td>
+                <td class="whitespace-nowrap px-3 py-4 text-sm text-gray-500"><%= flight[:ticket_count] %></td>
+       
                 <td class="relative whitespace-nowrap py-4 pl-3 pr-4 text-right text-sm font-medium sm:pr-0">
                   <button type="button" class="rounded-md bg-indigo-600 px-3 py-2 text-center text-xs font-semibold text-white shadow-sm hover:bg-indigo-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600">
                     <a href="/flights/<%= flight[:id] %>/edit">Edit</a>

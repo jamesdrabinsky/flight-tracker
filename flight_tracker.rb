@@ -65,7 +65,8 @@ helpers do
       WHERE user_id = $1;
     SQL
 
-    query(sql, session[:user_id]).first["page_count"].to_i
+    result = query(sql, session[:user_id]).first["page_count"].to_i
+    result.zero? ? 1 : result
   end
 
   def flight_count
@@ -232,6 +233,18 @@ def update_flight(origin, destination, date, flight_id)
   SQL
 
   query(sql, origin, destination, date, flight_id)
+
+  sql_2 = <<~SQL
+    UPDATE tickets
+    SET code = (SELECT code FROM flights WHERE id = $1) || SUBSTRING(code, '-[a-z0-9]+$')
+    WHERE flight_id = $1;
+  SQL
+
+  # -- (SELECT code FROM flights WHERE id = $1)
+  # -- SUBSTRING(code, '-[a-z\d]+$')
+  # CONCAT(SELECT code FROM flights WHERE id = $1), SUBSTRING(code, '-[a-z0-9]+$'))
+
+  query(sql_2, flight_id)
 end
 
 def delete_flight(flight_id)
@@ -248,18 +261,27 @@ def create_new_ticket(ticket_class, seat, traveler, bags, flight_id)
 end
 
 def validate_ticket(ticket_class, seat, traveler, bags, flight_id)
-  origin, destination, date_string = params.values
-  date = Date.strptime(date_string, "%Y-%m-%d") 
+  session[:error] = []
 
-  if origin == 'Select an origin' || destination == 'Select a destination'
-    session[:error] = "Select values for the origin and destination"
-  elsif origin == destination
-    session[:error] = "Origin and destination cannot be the same"
-  elsif !(date_string =~ /\d{4}-\d{2}-\d{2}/)
-    session[:error] = "Date can only contain numeric characters (mm/dd/yyyy)"
-  elsif !flight_unique?(params, session[:user_id])
-    session[:error] = "Flight origin, destination and date must be unique"
+  if ticket_class == 'Select a class' || seat == 'Select a seat'\
+    || traveler == 'Select a traveler' || bags == 'Select number of bags'
+    session[:error] << "Select values for class, seat, traveler and bags"
   end
+  if ticket_count(flight_id) == 4
+    session[:error] << "You have reached the limit of four tickets for this flight"
+  end
+
+  session.delete(:error) if session[:error].empty?
+end
+
+def ticket_count(flight_id)
+  sql = <<~SQL
+    SELECT COUNT(id) ticket_count
+    FROM tickets
+    WHERE flight_id = $1;
+  SQL
+
+  query(sql, flight_id).first["ticket_count"].to_i
 end
 
 def ticket_limit?(flight_id)
@@ -295,8 +317,7 @@ def update_ticket(ticket_class, seat, traveler, bags, ticket_id)
     SET class = $1,
         seat = $2,
         traveler = $3,
-        bags = $4,
-        code = ticket_code($5)
+        bags = $4
     WHERE id = $5
   SQL
 
@@ -310,9 +331,14 @@ end
 
 def load_current_page_flights(page_number)
   sql = <<~SQL 
-    SELECT * 
-    FROM flights 
-    WHERE user_id = $1 
+    SELECT 
+      f.id, f.origin, f.destination, f.date, f.code,
+      COUNT(t.id) ticket_count
+    FROM flights f
+    LEFT JOIN tickets t ON t.flight_id = f.id
+    WHERE f.user_id = $1 
+    GROUP BY 1,2,3,4,5
+    ORDER BY f.date , f.origin, f.destination
     LIMIT 5 OFFSET $2
   SQL
 
@@ -323,7 +349,8 @@ def load_current_page_flights(page_number)
       origin: tuple["origin"],
       destination: tuple["destination"],
       date: tuple["date"],
-      code: tuple["code"] }
+      code: tuple["code"],
+      ticket_count: tuple["ticket_count"] }
   end
 end
 
@@ -393,21 +420,18 @@ get "/" do
 end
 
 # View all flights
-get "/flights" do   
-  @page_number = params[:page].to_i
-
-  if !page_exist?(@page_number)
-    session[:error] = "That page does not exist"
-    redirect "/flights?page=1"
-  end
-
-  params[:page] ||= 1
-
+get "/flights" do    
+  @page_number = params[:page] ? params[:page].to_i : 1
   @airports = all_airports
   @today = Date.today.strftime('%Y-%m-%d')
   @flights = load_current_page_flights(@page_number)
 
-  erb :index, layout: :layout
+  if page_exist?(@page_number)
+    erb :index, layout: :layout
+  else
+    session[:error] = "That page does not exist"
+    redirect "/"
+  end
 end
 
 # Create a new flight
@@ -467,7 +491,9 @@ post "/flights/:id" do
     status 422
     erb :flight, layout: :layout
   else
-    update_flight(*params.values_at(:origin, :destination, :date), id)
+    origin, destination, date = params.values_at(:origin, :destination, :date)
+    # update_flight(*params.values_at(:origin, :destination, :date), id)
+    update_flight(origin, destination, date, id)
     session[:success] = "The flight has been updated"
     redirect "/flights/#{id}/edit"
   end
@@ -488,12 +514,14 @@ end
 
 # Add a new ticket to a flight
 post "/flights/:id/tickets" do
+  select_params = params.values_at(:class, :seat, :traveler, :bags, :id)
 
-  # validate_ticket()
+  validate_ticket(*select_params)
+  
+  @airports = all_airports
   @flight_id = params[:id].to_i
   @flight = load_flight(@flight_id)
-
-  select_params = params.values_at(:class, :seat, :traveler, :bags, :id)
+  @tickets = find_tickets_for_flight(@flight_id)
 
   if session[:error]
     status 422
