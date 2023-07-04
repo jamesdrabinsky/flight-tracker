@@ -39,10 +39,18 @@ UPDATE airports
 SET city_country_airport = CONCAT(city, ', ', country, ' ', '(', name, ' - ', iata_code, ')');
 
 ALTER TABLE airports
+ALTER COLUMN city_country_airport 
+SET NOT NULL;
+
+ALTER TABLE airports
 ADD COLUMN name_iata_code text;
 
 UPDATE airports
 SET name_iata_code = CONCAT(name, ' - ', iata_code);
+
+ALTER TABLE airports
+ALTER COLUMN name_iata_code 
+SET NOT NULL;
 
 UPDATE airports 
 SET name = INITCAP(name),
@@ -168,7 +176,7 @@ CREATE TABLE airports_flights (
 );
 
 ------------------------------------------------
-CREATE TYPE ticket_class_enum AS ENUM ('Economy', 'Premium Economy', 'Business Class', 'First Class');
+CREATE TYPE ticket_class_enum AS ENUM ('1. Economy', '2. Premium Economy', '3. Business Class', '4. First Class');
 CREATE TYPE ticket_seat_enum AS ENUM ('Window', 'Middle', 'Aisle');
 CREATE TYPE ticket_traveler_enum AS ENUM ('Adult', 'Child', 'Infant');
 -- CREATE TYPE ticket_bags_enum AS ENUM (0, 1);
@@ -182,6 +190,11 @@ CREATE TABLE tickets (
   code text NOT NULL,
   flight_id integer REFERENCES flights(id) ON DELETE CASCADE
 );
+
+ALTER TYPE ticket_class_enum RENAME VALUE 'Economy' TO '1. Economy';
+ALTER TYPE ticket_class_enum RENAME VALUE 'Premium Economy' TO '2. Premium Economy';
+ALTER TYPE ticket_class_enum RENAME VALUE 'Business Class' TO '3. Business Class';
+ALTER TYPE ticket_class_enum RENAME VALUE 'First Class' TO '4. First Class';
 
 ------------------------------------------------
 

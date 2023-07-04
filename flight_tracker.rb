@@ -1,76 +1,54 @@
 require 'date'
 
+require 'dotenv'
 require "sinatra"
 # require "sinatra/content_for"
-# require "tilt/erubis"
+require "tilt/erubis"
 require 'bcrypt'
 require "pg"
 
 require "pry"
 
-# require_relative "database_persistence"
+require_relative "database_persistence"
+
+Dotenv.load('./.env')
 
 configure do
   enable :sessions
-  set :session_secret, "de802eb57d356b52574ab84bb23ee5b64c404440c2a3f85da18483765cdab230"
+  set :session_secret, ENV["SECRET"]
   set :erb, escape_html: true
 end
 
 configure(:development) do 
   require "sinatra/reloader"
-  # also_reload "database_persistence.rb"
+  also_reload "database_persistence.rb"
+end
+
+before do
+  @storage = DatabasePersistence.new(logger)
 end
 
 helpers do 
-  def flash_formatting
-    erb :flash_error_message
-  end
-
-  def all_airports
-    sql = <<~SQL
-      SELECT 
-        id, 
-        city_country_airport, 
-        name_iata_code
-      FROM airports
-      WHERE name is NOT NULL 
-      AND iata_code IS NOT NULL
-      ORDER BY city, country, name;
-    SQL
-
-    result = query(sql)
-
-    result.map do |tuple|
-      { id: tuple["id"],
-        city_country_airport: tuple["city_country_airport"],
-        name_iata_code: tuple["name_iata_code"] }
-    end
-  end
+#   def flash_formatting
+#     erb :flash_error_message
+#   end
 
   def full_airport_name(abbreviated_name)
-    sql = <<~SQL
-      SELECT city_country_airport
-      FROM airports 
-      WHERE name_iata_code = $1;
-    SQL
-
-    result = query(sql, abbreviated_name)
+    result = @storage.city_country_airport(abbreviated_name)
     result.first["city_country_airport"] if result.ntuples > 0
   end
 
   def page_count
-    sql = <<~SQL
-      SELECT CEIL(COUNT(id)::numeric / 5) page_count 
-      FROM flights 
-      WHERE user_id = $1;
-    SQL
-
-    result = query(sql, session[:user_id]).first["page_count"].to_i
+    result = @storage.page_count(session[:user_id])
     result.zero? ? 1 : result
   end
 
   def flight_count
-    all_flights(session[:user_id]).size
+    @storage.all_flights(session[:user_id]).size
+  end
+
+  def ticket_count(flight_id)
+    @storage.ticket_count(flight_id)
   end
 
   def pagination_range(page_number)
@@ -89,7 +67,8 @@ helpers do
 end
 
 def database_connection
-  PG.connect(dbname: "flights")
+  # PG.connect(dbname: "flights")
+  PG.connect(dbname: "flight_tracker")
 end
 
 def query(statement, *params)
@@ -99,25 +78,18 @@ end
 
 def require_signed_in_user
   unless session[:username]
-    session[:error] = "Must be signed in to perform this action"
+    if request.get?
+      session[:error] = "Must be signed in to access this page"
+    else
+      session[:error] = "Must be signed in to perform this action"
+    end
     redirect "/"
   end
 end
 
-def load_user_credentials(username)
-  result = query("SELECT * FROM users WHERE username = $1", username)
-  tuple = result.first || {}
-  
-  { user_id: tuple.fetch("id", nil),
-    first_name: tuple.fetch("first_name", nil), 
-    last_name: tuple.fetch("last_name", nil), 
-    username: tuple.fetch("username", nil), 
-    password: tuple.fetch("password", BCrypt::Password.create(nil)) }
-end
-
 def valid_credentials?(username, password)
-  credentials = load_user_credentials(username)
-  BCrypt::Password.new(credentials[:password]) == password
+  credentials = @storage.load_user_credentials(username)
+  BCrypt::Password.new(credentials[:password]) == password unless credentials.nil?
 end
 
 def validate_registration(params)
@@ -125,16 +97,16 @@ def validate_registration(params)
   session[:error] = []
 
   if !(first_name =~ /^[a-z]+$/i)
-    session[:error] << "First names can only contain alpha characters"
+    session[:error] << "First names can only contain alpha characters (no spaces)"
   end
   if !(last_name =~ /^[a-z]+( |-)?[a-z]*$/i)
-    session[:error] << "Last names must contain alpha characters and an optional '-' or space"
+    session[:error] << "Last names can only contain alpha characters and an optional '-' or space"
   end
   if !(username =~ /^[a-z0-9]+$/i)
-    session[:error] << "Username can only contain alpha and numeric characters"
+    session[:error] << "Username can only contain alpha and numeric characters (no spaces)"
   end
   if !(password =~ /^[a-z0-9]{6,}$/i)
-    session[:error] << "Password can only contain alpha and numeric characters and must be at least 6 characters"
+    session[:error] << "Password can only contain alpha and numeric characters and must be at least 6 characters (no spaces)"
   end
   if !username_unique?(username)
     session[:error] << "The username entered is already in use"
@@ -144,19 +116,7 @@ def validate_registration(params)
 end
 
 def username_unique?(username)
-  sql = "SELECT username FROM users;"
-  usernames = query(sql).field_values("username")
-
-  usernames.none? do |name|
-    name == username
-  end
-end
-
-def create_new_user(first_name, last_name, username, password)
-  hashed_password = BCrypt::Password.create(password)
-
-  sql = "INSERT INTO users (first_name, last_name, username, password) VALUES ($1, $2, $3, $4)"
-  query(sql, first_name, last_name, username, hashed_password)
+  @storage.find_user(username).ntuples == 0
 end
 
 def validate_flight(params)
@@ -171,7 +131,7 @@ def validate_flight(params)
     session[:error] << "Origin and destination cannot be the same"
   end
   if !(date_string =~ /\d{4}-\d{2}-\d{2}/)
-    session[:error] << "Date can only contain numeric characters (mm/dd/yyyy)"
+    session[:error] << "Date must be entered in the following format (mm/dd/yyyy)"
   end
   if !flight_unique?(params, session[:user_id])
     session[:error] << "Flight origin, destination and date must be unique"
@@ -181,83 +141,7 @@ def validate_flight(params)
 end
 
 def flight_unique?(params, user_id)
-  all_flights(user_id).none? do |flight|
-    flight_values = flight.values_at(:origin, :destination, :date)
-    param_values = params.values_at(:origin, :destination, :date)
-    flight_values == param_values && flight[:id] != params[:id]
-  end
-end
-
-def create_new_flight(origin, destination, date, user_id)
-  sql = <<~SQL
-    INSERT INTO flights (origin, destination, date, code, user_id) 
-    VALUES ($1, $2, $3, flight_code($1, $2, $3), $4)
-  SQL
-
-  query(sql, origin, destination, date, user_id)
-end
-
-def all_flights(user_id)
-  sql = <<~SQL
-    SELECT *
-    FROM flights 
-    WHERE user_id = $1
-    ORDER BY date , origin, destination;
-  SQL
-
-  result = query(sql, user_id)
-
-  result.map do |tuple|
-    { id: tuple["id"],
-      origin: tuple["origin"],
-      destination: tuple["destination"],
-      date: tuple["date"],
-      code: tuple["code"] }
-  end
-end
-
-def load_flight(flight_id)
-  sql = "SELECT * FROM flights WHERE id = $1"
-  result = query(sql, flight_id)
-  result.first.transform_keys(&:to_sym)
-end
-
-def update_flight(origin, destination, date, flight_id)
-  sql = <<~SQL
-    UPDATE flights
-    SET origin = $1,
-        destination = $2,
-        date = $3,
-        code = flight_code($1, $2, $3)
-    WHERE id = $4
-  SQL
-
-  query(sql, origin, destination, date, flight_id)
-
-  sql_2 = <<~SQL
-    UPDATE tickets
-    SET code = (SELECT code FROM flights WHERE id = $1) || SUBSTRING(code, '-[a-z0-9]+$')
-    WHERE flight_id = $1;
-  SQL
-
-  # -- (SELECT code FROM flights WHERE id = $1)
-  # -- SUBSTRING(code, '-[a-z\d]+$')
-  # CONCAT(SELECT code FROM flights WHERE id = $1), SUBSTRING(code, '-[a-z0-9]+$'))
-
-  query(sql_2, flight_id)
-end
-
-def delete_flight(flight_id)
-  sql = "DELETE FROM flights WHERE id = $1;"
-  query(sql, flight_id)
-end
-
-def create_new_ticket(ticket_class, seat, traveler, bags, flight_id)
-  sql = <<~SQL
-    INSERT INTO tickets (class, seat, traveler, bags, code, flight_id) 
-    VALUES ($1, $2, $3, $4, ticket_code($5), $5);
-  SQL
-  query(sql, ticket_class, seat, traveler, bags, flight_id)
+  @storage.matching_flights(params, user_id).ntuples == 0
 end
 
 def validate_ticket(ticket_class, seat, traveler, bags, flight_id)
@@ -267,103 +151,11 @@ def validate_ticket(ticket_class, seat, traveler, bags, flight_id)
     || traveler == 'Select a traveler' || bags == 'Select number of bags'
     session[:error] << "Select values for class, seat, traveler and bags"
   end
-  if ticket_count(flight_id) == 4
+  if @storage.ticket_count(flight_id) == 4
     session[:error] << "You have reached the limit of four tickets for this flight"
   end
 
   session.delete(:error) if session[:error].empty?
-end
-
-def ticket_count(flight_id)
-  sql = <<~SQL
-    SELECT COUNT(id) ticket_count
-    FROM tickets
-    WHERE flight_id = $1;
-  SQL
-
-  query(sql, flight_id).first["ticket_count"].to_i
-end
-
-def ticket_limit?(flight_id)
-  sql = "SELECT COUNT(id) FROM tickets WHERE flight_id = $1"
-  result = query(sql, flight_id)
-  result.first["count"] == 4
-end
-
-def find_tickets_for_flight(flight_id)
-  sql = "SELECT * FROM tickets WHERE flight_id = $1"
-  result = query(sql, flight_id)
-  
-  result.map do |tuple|
-    { id: tuple["id"].to_i,
-      class: tuple["class"],
-      seat: tuple["seat"],
-      traveler: tuple["traveler"],
-      bags: tuple["bags"].to_i,
-      code: tuple["code"] }
-    
-  end
-end
-
-def load_ticket(ticket_id)
-  sql = "SELECT * FROM tickets WHERE id = $1;"
-  result = query(sql, ticket_id)
-  result.first.transform_keys(&:to_sym)
-end
-
-def update_ticket(ticket_class, seat, traveler, bags, ticket_id)
-  sql = <<~SQL
-    UPDATE tickets
-    SET class = $1,
-        seat = $2,
-        traveler = $3,
-        bags = $4
-    WHERE id = $5
-  SQL
-
-  query(sql, ticket_class, seat, traveler, bags, ticket_id)
-end
-
-def delete_ticket(ticket_id)
-  sql = "DELETE FROM tickets WHERE id = $1;"
-  query(sql, ticket_id)
-end
-
-def load_current_page_flights(page_number)
-  sql = <<~SQL 
-    SELECT 
-      f.id, f.origin, f.destination, f.date, f.code,
-      COUNT(t.id) ticket_count
-    FROM flights f
-    LEFT JOIN tickets t ON t.flight_id = f.id
-    WHERE f.user_id = $1 
-    GROUP BY 1,2,3,4,5
-    ORDER BY f.date , f.origin, f.destination
-    LIMIT 5 OFFSET $2
-  SQL
-
-  result = query(sql, session[:user_id], (page_number - 1) * 5)
-  
-  result.map do |tuple|
-    { id: tuple["id"],
-      origin: tuple["origin"],
-      destination: tuple["destination"],
-      date: tuple["date"],
-      code: tuple["code"],
-      ticket_count: tuple["ticket_count"] }
-  end
-end
-
-def flight_exist?(flight_id)
-  sql = "SELECT * FROM flights WHERE id = $1"
-  result = query(sql, flight_id)
-  result.ntuples > 0
-end
-
-def ticket_exist?(flight_id, ticket_id)
-  sql = "SELECT * FROM tickets WHERE id = $1 AND flight_id = $2"
-  result = query(sql, ticket_id, flight_id)
-  result.ntuples > 0
 end
 
 def page_exist?(page_number)
@@ -394,14 +186,16 @@ end
 # User signout
 post "/users/signout" do
   session.clear
-  session[:success] = "You have been signed out."
+  session[:success] = "You have been signed out"
   redirect "/"
 end
 
+# Sign up form
 get "/register" do
   erb :register, layout: :layout
 end
 
+# Sign up validation
 post "/register" do 
   validate_registration(params)
 
@@ -409,7 +203,8 @@ post "/register" do
     status 422
     erb :register, layout: :layout
   else
-    create_new_user(*params.values)
+    select_params = params.values_at(:first_name, :last_name, :username, :password)
+    @storage.create_new_user(*select_params)
     session[:success] = "You are registered"
     redirect "/users/signin"
   end
@@ -420,11 +215,15 @@ get "/" do
 end
 
 # View all flights
-get "/flights" do    
+get "/flights" do
   @page_number = params[:page] ? params[:page].to_i : 1
-  @airports = all_airports
+
+  # session[:last_request] = request.fullpath
+  session[:page] = @page_number
+
+  @airports = @storage.all_airports
   @today = Date.today.strftime('%Y-%m-%d')
-  @flights = load_current_page_flights(@page_number)
+  @flights = @storage.load_current_page_flights(@page_number, session[:user_id])
 
   if page_exist?(@page_number)
     erb :index, layout: :layout
@@ -440,32 +239,36 @@ post "/flights" do
 
   validate_flight(params)
 
-  @airports = all_airports
+  @page_number = session[:page]
+  @airports = @storage.all_airports
   @today = Date.today.strftime('%Y-%m-%d')
-  @page_number = 1
-  @flights = load_current_page_flights(@page_number)
+  @flights = @storage.load_current_page_flights(@page_number, session[:user_id])
 
   if session[:error]
     status 422
     erb :index, layout: :layout
   else
-    create_new_flight(*params.values, session[:user_id])
-    session[:success] = "A new flight has been created"
-    redirect "/"
+    select_params = params.values_at(:origin, :destination, :date)
+    @storage.create_new_flight(*select_params, session[:user_id])
+    session[:success] = "A new flight has been created"    
+    redirect "/flights?page=#{session[:page]}" # Do you want to redirect to first page or to current page?
   end
 end
 
-# Edit an existing flight
+# View a single flight and its tickets
 get "/flights/:id/edit" do
   session[:last_request] = request.fullpath
+  
   require_signed_in_user
+  
   id = params[:id].to_i
+  @flight = @storage.load_flight(id)
 
-  if flight_exist?(id)
-    @airports = all_airports
+  if @flight
+    @airports = @storage.all_airports
     @today = Date.today.strftime('%Y-%m-%d')
-    @flight = load_flight(id)
-    @tickets = find_tickets_for_flight(id)
+    @flight_id = params[:id].to_i
+    @tickets = @storage.find_tickets_for_flight(id)
 
     erb :flight, layout: :layout
   else
@@ -482,10 +285,11 @@ end
 post "/flights/:id" do
   validate_flight(params)
 
-  @airports = all_airports
+  @airports = @storage.all_airports
   @today = Date.today.strftime('%Y-%m-%d')
   id = params[:id].to_i
-  @flight = load_flight(id)
+  @flight = @storage.load_flight(id)
+  @tickets = @storage.find_tickets_for_flight(id)
 
   if session[:error]
     status 422
@@ -493,7 +297,7 @@ post "/flights/:id" do
   else
     origin, destination, date = params.values_at(:origin, :destination, :date)
     # update_flight(*params.values_at(:origin, :destination, :date), id)
-    update_flight(origin, destination, date, id)
+    @storage.update_flight(origin, destination, date, id)
     session[:success] = "The flight has been updated"
     redirect "/flights/#{id}/edit"
   end
@@ -502,14 +306,16 @@ end
 # Delete a flight
 post "/flights/:id/destroy" do
   id = params[:id].to_i
-  delete_flight(id)
-
+  @storage.delete_flight(id)
   session[:success] = "The flight has been deleted."
-  if env["HTTP_X_REQUESTED_WITH"] == "XMLHttpRequest"
-    "/"
-  else
-    redirect "/"
-  end
+  redirect "/"
+end
+
+# Remove all flights
+post "/flights_remove_all" do  
+  @storage.remove_all_flights(session[:user_id])
+  session[:success] = "All flights were deleted"
+  redirect "/"
 end
 
 # Add a new ticket to a flight
@@ -518,16 +324,16 @@ post "/flights/:id/tickets" do
 
   validate_ticket(*select_params)
   
-  @airports = all_airports
+  @airports = @storage.all_airports
   @flight_id = params[:id].to_i
-  @flight = load_flight(@flight_id)
-  @tickets = find_tickets_for_flight(@flight_id)
+  @flight = @storage.load_flight(@flight_id)
+  @tickets = @storage.find_tickets_for_flight(@flight_id)
 
   if session[:error]
     status 422
     erb :flight, layout: :layout
   else
-    create_new_ticket(*select_params)
+    @storage.create_new_ticket(*select_params)
     session[:success] = "A new ticket has been created"
     redirect "/flights/#{@flight_id}/edit"
   end
@@ -539,10 +345,10 @@ get "/flights/:flight_id/tickets/:id/edit" do
   require_signed_in_user
   @id = params[:id].to_i
   @flight_id = params[:flight_id].to_i
+  @ticket = @storage.load_ticket(@flight_id, @id)
 
-  if ticket_exist?(@flight_id, @id)
-    @flight = load_flight(@flight_id)
-    @ticket = load_ticket(@id)
+  if @ticket
+    @flight = @storage.load_flight(@flight_id)
     erb :ticket, layout: :layout
   else
     session[:error] = "That page does not exist"
@@ -558,9 +364,9 @@ end
 post "/flights/:flight_id/tickets/:id" do
   @flight_id = params[:flight_id].to_i
   id = params[:id].to_i
-  @ticket = load_ticket(id)
+  @ticket = @storage.load_ticket(@flight_id, id)
 
-  update_ticket(*params.values_at(:class, :seat, :traveler, :bags), id)
+  @storage.update_ticket(*params.values_at(:class, :seat, :traveler, :bags), id)
   session[:success] = "The ticket has been updated"
   redirect "/flights/#{@flight_id}/tickets/#{id}/edit"
 end
@@ -569,12 +375,16 @@ end
 post "/flights/:flight_id/tickets/:id/destroy" do
   @flight_id = params[:flight_id].to_i
   id = params[:id].to_i
-  delete_ticket(id)
+  @storage.delete_ticket(id)
 
   session[:success] = "The ticket has been deleted."
-  if env["HTTP_X_REQUESTED_WITH"] == "XMLHttpRequest"
-    "/flights/#{@flight_id}/edit"
-  else
-    redirect "/flights/#{@flight_id}/edit"
-  end
+  redirect "/flights/#{@flight_id}/edit"
+end
+
+# Delete all tickets for a flight
+post "/flights/:id/tickets/remove_all" do
+  @flight_id = params[:id].to_i
+  @storage.remove_all_tickets(@flight_id)
+  session[:success] = "All tickets were deleted"
+  redirect "/flights/#{@flight_id}/edit"
 end
