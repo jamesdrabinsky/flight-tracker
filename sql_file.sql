@@ -2,6 +2,8 @@
 
 CREATE DATABASE flight_tracker;
 
+-----------------------------------------
+
 \c flight_tracker
 
 -----------------------------------------
@@ -80,7 +82,7 @@ CREATE TABLE tickets (
   traveler ticket_traveler_enum NOT NULL,
   bags integer NOT NULL,
   code text NOT NULL,
-  flight_id integer REFERENCES flights(id) ON DELETE CASCADE
+  flight_id integer NOT NULL REFERENCES flights(id) ON DELETE CASCADE
 );
 
 -----------------------------------------
@@ -96,36 +98,15 @@ CREATE FUNCTION ticket_code (flight_id integer) RETURNS text
     SELECT code || '-' || SUBSTR(md5(RANDOM()::text), 0, 10)
     FROM flights
     WHERE id = $1
-
-    -- WITH flight_info AS (SELECT code FROM flights WHERE flight_id = $1)
-    -- SELECT (SELECT code FROM flights WHERE flight_id = $1) || '-' || SUBSTR(md5(RANDOM()::text), 0, 10)
-    -- FROM flight_info
   $$
   LANGUAGE SQL;
 
 -----------------------------------------
 
--- sql = <<~SQL
---     INSERT INTO users (first_name, last_name, username, password) 
---       VALUES ('launch', 'school', 'lsuser1', '#{BCrypt::Password.create('lsuser1password')}');
--- SQL
-
 INSERT INTO users (first_name, last_name, username, password)
   VALUES ('launch', 'school', 'lsuser1', '$2a$12$lQJS8NGvqID8ZxVZ2Kl1XuEIlrSY4JgP1wUWG4J0Ve9Mecx3yKdTi');
 
 -----------------------------------------
-
--- 20.times.map do 
-
---     origin, destination, date = 2.times.map { all_airports.sample[:name_iata_code] }
---     date = rand(Date.new(2023,7,5)..Date.new(2024,7,5)).strftime('%Y-%m-%d')
-
---     puts <<~SQL
---         INSERT INTO flights (origin, destination, date, code, user_id)
---           VALUES ('#{origin}', '#{destination}', '#{date}', flight_code('#{origin}', '#{destination}', '#{date}'), 1);
---     SQL
-
--- end
 
 INSERT INTO flights (origin, destination, date, code, user_id)
   VALUES ('Cork - ORK', 'Richards Bay - RCB', '2023-09-18', flight_code('Cork - ORK', 'Richards Bay - RCB', '2023-09-18'), 1);
@@ -169,20 +150,6 @@ INSERT INTO flights (origin, destination, date, code, user_id)
   VALUES ('Chatham Islands - CHT', 'Cranbrook - YXC', '2023-07-14', flight_code('Chatham Islands - CHT', 'Cranbrook - YXC', '2023-07-14'), 1);
 
 -----------------------------------------
-
--- (1..20).each do |flight_id|
---   rand(0..4).times do 
---       ticket_class = ['1. Economy', '2. Premium Economy', '3. Business Class', '4. First Class'].sample
---       seat = ['Window', 'Middle', 'Aisle'].sample
---       traveler = ['Adult', 'Child', 'Infant'].sample
---       bags = rand(0..2)
-
---       puts <<~SQL
---       INSERT INTO tickets (class, seat, traveler, bags, code, flight_id) 
---         VALUES ('#{ticket_class}', '#{seat}', '#{traveler}', '#{bags}', ticket_code(#{flight_id}), #{flight_id});
---       SQL
---   end
--- end 
 
 INSERT INTO tickets (class, seat, traveler, bags, code, flight_id) 
   VALUES ('2. Premium Economy', 'Window', 'Child', '0', ticket_code(1), 1);

@@ -1,7 +1,13 @@
 <div class="px-4 sm:px-6 lg:px-8">
   <div class="sm:flex sm:items-center">
     <div class="sm:flex-auto">
-      <h1 class="inline-block text-base font-semibold leading-6 text-gray-900">Flight Information for <%= "#{session[:first_name]} #{session[:last_name]}" %></h1>
+      <h1 class="inline-block text-base font-semibold leading-6 text-gray-900">
+        <% if session[:username] %>
+          Flight Information for <%= "#{session[:first_name].capitalize} #{session[:last_name].capitalize}" %>
+        <% else %>
+          Flight Information
+        <% end %>
+      </h1>
       <% if flight_count > 0 %>
         <form action="/flights_remove_all" method="POST" class="inline-block float-right">
           <button type="submit" class="block rounded-md bg-indigo-600 px-3 py-2 text-center text-sm font-semibold text-white shadow-sm hover:bg-indigo-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600">

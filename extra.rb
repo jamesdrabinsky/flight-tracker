@@ -109,3 +109,51 @@
 #   result = query(sql, ticket_id, flight_id)
 #   result.ntuples > 0
 # end
+
+#   def find_user(username)
+#     sql = "SELECT * FROM users WHERE username = $1"
+#     query(sql, username)
+#   end
+
+# Extra code for ticket_code function
+
+# -- WITH flight_info AS (SELECT code FROM flights WHERE flight_id = $1)
+# -- SELECT (SELECT code FROM flights WHERE flight_id = $1) || '-' || SUBSTR(md5(RANDOM()::text), 0, 10)
+# -- FROM flight_info
+
+# INSERT statement for default user
+
+# -- sql = <<~SQL
+# --     INSERT INTO users (first_name, last_name, username, password) 
+# --       VALUES ('launch', 'school', 'lsuser1', '#{BCrypt::Password.create('lsuser1password')}');
+# -- SQL
+
+# Generate INSERT statements for flights table
+
+# -- 20.times.map do 
+
+#     --     origin, destination, date = 2.times.map { all_airports.sample[:name_iata_code] }
+#     --     date = rand(Date.new(2023,7,5)..Date.new(2024,7,5)).strftime('%Y-%m-%d')
+    
+#     --     puts <<~SQL
+#     --         INSERT INTO flights (origin, destination, date, code, user_id)
+#     --           VALUES ('#{origin}', '#{destination}', '#{date}', flight_code('#{origin}', '#{destination}', '#{date}'), 1);
+#     --     SQL
+    
+#     -- end
+
+# Generate INSERT statements for tickets table
+
+# -- (1..20).each do |flight_id|
+#     --   rand(0..4).times do 
+#     --       ticket_class = ['1. Economy', '2. Premium Economy', '3. Business Class', '4. First Class'].sample
+#     --       seat = ['Window', 'Middle', 'Aisle'].sample
+#     --       traveler = ['Adult', 'Child', 'Infant'].sample
+#     --       bags = rand(0..2)
+    
+#     --       puts <<~SQL
+#     --       INSERT INTO tickets (class, seat, traveler, bags, code, flight_id) 
+#     --         VALUES ('#{ticket_class}', '#{seat}', '#{traveler}', '#{bags}', ticket_code(#{flight_id}), #{flight_id});
+#     --       SQL
+#     --   end
+#     -- end 

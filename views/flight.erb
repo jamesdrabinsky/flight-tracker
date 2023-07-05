@@ -74,7 +74,7 @@
       <h1 class="inline-block text-base font-semibold leading-6 text-gray-900">Ticket Information for <%= @flight[:code] %></h1>
       
       <% if ticket_count(@flight_id) > 0 %>
-        <form action="/flights/:id/tickets/remove_all" method="POST" class="inline-block float-right">
+        <form action="/flights/<%= params[:id] %>/tickets_remove_all" method="POST" class="inline-block float-right">
           <button type="submit" class="block rounded-md bg-indigo-600 px-3 py-2 text-center text-sm font-semibold text-white shadow-sm hover:bg-indigo-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600">
             Remove All Tickets
           </button>

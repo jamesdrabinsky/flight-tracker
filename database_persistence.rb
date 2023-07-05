@@ -15,14 +15,16 @@ class DatabasePersistence
     @db.exec_params(statement, params)
   end
 
+  def find_user(username)
+    sql = "SELECT * FROM users WHERE username = $1"
+    query(sql, username)
+  end
+
   def all_airports
     sql = <<~SQL
-      SELECT 
-        id, 
-        city_country_airport, 
-        name_iata_code
+      SELECT id, city_country_airport, name_iata_code
       FROM airports
-      WHERE name is NOT NULL 
+      WHERE name is NOT NULL
       AND iata_code IS NOT NULL
       ORDER BY city, country, name;
     SQL
@@ -39,7 +41,7 @@ class DatabasePersistence
   def city_country_airport(abbreviated_name)
     sql = <<~SQL
       SELECT city_country_airport
-      FROM airports 
+      FROM airports
       WHERE name_iata_code = $1;
     SQL
 
@@ -48,8 +50,8 @@ class DatabasePersistence
 
   def page_count(user_id)
     sql = <<~SQL
-      SELECT CEIL(COUNT(id)::numeric / 5) page_count 
-      FROM flights 
+      SELECT CEIL(COUNT(id)::numeric / 5) page_count
+      FROM flights
       WHERE user_id = $1;
     SQL
 
@@ -66,46 +68,41 @@ class DatabasePersistence
     query(sql, flight_id).first["ticket_count"].to_i
   end
 
-#   def find_user(username)
-#     sql = "SELECT * FROM users WHERE username = $1"
-#     query(sql, username)
-#   end
-
-def load_user_credentials(username)
+  def load_user_credentials(username)
     sql = "SELECT * FROM users WHERE username = $1"
     result = query(sql, username)
-  
-    if result.ntuples > 0
-      tuple = result.first
-  
-      { user_id: tuple["id"],
-        first_name: tuple["first_name"], 
-        last_name: tuple["last_name"], 
-        username: tuple["username"],
-        password: tuple["password"] }
-    end
+
+    return unless result.ntuples > 0
+    tuple = result.first
+
+    { user_id: tuple["id"],
+      first_name: tuple["first_name"],
+      last_name: tuple["last_name"],
+      username: tuple["username"],
+      password: tuple["password"] }
   end
 
   def create_new_flight(origin, destination, date, user_id)
     sql = <<~SQL
-      INSERT INTO flights (origin, destination, date, code, user_id) 
+      INSERT INTO flights (origin, destination, date, code, user_id)
       VALUES ($1, $2, $3, flight_code($1, $2, $3), $4)
     SQL
-  
     query(sql, origin, destination, date, user_id)
   end
 
   def create_new_user(first_name, last_name, username, password)
     hashed_password = BCrypt::Password.create(password)
-  
-    sql = "INSERT INTO users (first_name, last_name, username, password) VALUES ($1, $2, $3, $4)"
+    sql = <<~SQL
+      INSERT INTO users (first_name, last_name, username, password)
+      VALUES ($1, $2, $3, $4)
+    SQL
     query(sql, first_name, last_name, username, hashed_password)
   end
 
   def all_flights(user_id)
     sql = <<~SQL
       SELECT *
-      FROM flights 
+      FROM flights
       WHERE user_id = $1
       ORDER BY date , origin, destination;
     SQL
@@ -121,9 +118,7 @@ def load_user_credentials(username)
     end
   end
 
-  def matching_flights(params, user_id)
-    origin, destination, date, flight_id = params.values_at(:origin, :destination, :date, :id)
-
+  def matching_flights(origin, destination, date, flight_id, user_id)
     sql = <<~SQL
         SELECT *
         FROM flights
@@ -135,19 +130,18 @@ def load_user_credentials(username)
     query(sql, origin, destination, date, flight_id, user_id)
   end
 
-  def load_flight(flight_id)
-    sql = "SELECT * FROM flights WHERE id = $1"
-    result = query(sql, flight_id)
+  def load_flight(flight_id, user_id)
+    sql = "SELECT * FROM flights WHERE id = $1 AND user_id = $2"
+    result = query(sql, flight_id, user_id)
 
-    if result.ntuples > 0
-      tuple = result.first
+    return unless result.ntuples > 0
+    tuple = result.first
 
-      { id: tuple["id"].to_i,
-        origin: tuple["origin"],
-        destination: tuple["destination"],
-        date: tuple["date"],
-        code: tuple["code"] }
-    end
+    { id: tuple["id"].to_i,
+      origin: tuple["origin"],
+      destination: tuple["destination"],
+      date: tuple["date"],
+      code: tuple["code"] }
   end
 
   def update_flight(origin, destination, date, flight_id)
@@ -159,7 +153,6 @@ def load_user_credentials(username)
           code = flight_code($1, $2, $3)
       WHERE id = $4
     SQL
-  
     query(flight_sql, origin, destination, date, flight_id)
   
     ticket_sql = <<~SQL
@@ -167,7 +160,6 @@ def load_user_credentials(username)
       SET code = (SELECT code FROM flights WHERE id = $1) || SUBSTRING(code, '-[a-z0-9]+$')
       WHERE flight_id = $1;
     SQL
-  
     query(ticket_sql, flight_id)
   end
 
@@ -178,7 +170,7 @@ def load_user_credentials(username)
 
   def create_new_ticket(ticket_class, seat, traveler, bags, flight_id)
     sql = <<~SQL
-      INSERT INTO tickets (class, seat, traveler, bags, code, flight_id) 
+      INSERT INTO tickets (class, seat, traveler, bags, code, flight_id)
       VALUES ($1, $2, $3, $4, ticket_code($5), $5);
     SQL
     query(sql, ticket_class, seat, traveler, bags, flight_id)
@@ -186,8 +178,8 @@ def load_user_credentials(username)
 
   def find_tickets_for_flight(flight_id)
     sql = <<~SQL
-      SELECT * 
-      FROM tickets 
+      SELECT *
+      FROM tickets
       WHERE flight_id = $1
       ORDER BY SUBSTRING(class::text, '^[0-9]{1}')::int DESC, bags DESC;
     SQL
@@ -204,20 +196,27 @@ def load_user_credentials(username)
     end
   end
 
-  def load_ticket(flight_id, ticket_id)
-    sql = "SELECT * FROM tickets WHERE flight_id = $1 AND id = $2;"
-    result = query(sql, flight_id, ticket_id)
+  def load_ticket(flight_id, ticket_id, user_id)
+    sql = <<~SQL
+      SELECT t.*
+      FROM tickets t
+      INNER JOIN flights f ON f.id = t.flight_id
+      WHERE t.flight_id = $1
+      AND t.id = $2
+      AND f.user_id = $3;
+    SQL
 
-    if result.ntuples > 0
-      tuple = result.first
+    result = query(sql, flight_id, ticket_id, user_id)
 
-      { id: tuple["id"].to_i,
-        class: tuple["class"],
-        seat: tuple["seat"],
-        traveler: tuple["traveler"],
-        bags: tuple["bags"].to_i,
-        code: tuple["code"] }
-    end
+    return unless result.ntuples > 0
+    tuple = result.first
+
+    { id: tuple["id"].to_i,
+      class: tuple["class"],
+      seat: tuple["seat"],
+      traveler: tuple["traveler"],
+      bags: tuple["bags"].to_i,
+      code: tuple["code"] }
   end
 
   def update_ticket(ticket_class, seat, traveler, bags, ticket_id)
@@ -229,7 +228,6 @@ def load_user_credentials(username)
           bags = $4
       WHERE id = $5
     SQL
-  
     query(sql, ticket_class, seat, traveler, bags, ticket_id)
   end
 
@@ -239,13 +237,13 @@ def load_user_credentials(username)
   end
 
   def load_current_page_flights(page_number, user_id)
-    sql = <<~SQL 
-      SELECT 
+    sql = <<~SQL
+      SELECT
         f.id, f.origin, f.destination, f.date, f.code,
         COUNT(t.id) ticket_count
       FROM flights f
       LEFT JOIN tickets t ON t.flight_id = f.id
-      WHERE f.user_id = $1 
+      WHERE f.user_id = $1
       GROUP BY 1,2,3,4,5
       ORDER BY f.date , f.origin, f.destination
       LIMIT 5 OFFSET $2
