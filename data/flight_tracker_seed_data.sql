@@ -1,5 +1,3 @@
--- psql -d postgres < sql_file.sql
-
 CREATE DATABASE flight_tracker;
 
 -----------------------------------------
@@ -71,7 +69,7 @@ CREATE TABLE flights (
 
 -----------------------------------------
 
-CREATE TYPE ticket_class_enum AS ENUM ('1. Economy', '2. Premium Economy', '3. Business Class', '4. First Class');
+CREATE TYPE ticket_class_enum AS ENUM ('1. First Class', '2. Business Class', '3. Premium Economy', '4. Economy');
 CREATE TYPE ticket_seat_enum AS ENUM ('Window', 'Middle', 'Aisle');
 CREATE TYPE ticket_traveler_enum AS ENUM ('Adult', 'Child', 'Infant');
 
@@ -152,62 +150,96 @@ INSERT INTO flights (origin, destination, date, code, user_id)
 -----------------------------------------
 
 INSERT INTO tickets (class, seat, traveler, bags, code, flight_id) 
-  VALUES ('2. Premium Economy', 'Window', 'Child', '0', ticket_code(1), 1);
+VALUES ('1. First Class', 'Middle', 'Adult', '1', ticket_code(1), 1);
 INSERT INTO tickets (class, seat, traveler, bags, code, flight_id) 
-  VALUES ('1. Economy', 'Aisle', 'Child', '1', ticket_code(2), 2);
+VALUES ('4. Economy', 'Window', 'Child', '0', ticket_code(1), 1);
 INSERT INTO tickets (class, seat, traveler, bags, code, flight_id) 
-  VALUES ('3. Business Class', 'Window', 'Child', '0', ticket_code(2), 2);
+VALUES ('1. First Class', 'Window', 'Child', '2', ticket_code(1), 1);
 INSERT INTO tickets (class, seat, traveler, bags, code, flight_id) 
-  VALUES ('1. Economy', 'Window', 'Infant', '0', ticket_code(2), 2);
+VALUES ('1. First Class', 'Aisle', 'Child', '2', ticket_code(2), 2);
 INSERT INTO tickets (class, seat, traveler, bags, code, flight_id) 
-  VALUES ('2. Premium Economy', 'Window', 'Child', '2', ticket_code(2), 2);
+VALUES ('1. First Class', 'Window', 'Adult', '0', ticket_code(2), 2);
 INSERT INTO tickets (class, seat, traveler, bags, code, flight_id) 
-  VALUES ('3. Business Class', 'Middle', 'Infant', '2', ticket_code(3), 3);
+VALUES ('3. Premium Economy', 'Window', 'Infant', '1', ticket_code(2), 2);
 INSERT INTO tickets (class, seat, traveler, bags, code, flight_id) 
-  VALUES ('3. Business Class', 'Aisle', 'Child', '0', ticket_code(3), 3);
+VALUES ('3. Premium Economy', 'Window', 'Infant', '0', ticket_code(2), 2);
 INSERT INTO tickets (class, seat, traveler, bags, code, flight_id) 
-  VALUES ('4. First Class', 'Middle', 'Adult', '0', ticket_code(6), 6);
+VALUES ('1. First Class', 'Aisle', 'Adult', '2', ticket_code(3), 3);
 INSERT INTO tickets (class, seat, traveler, bags, code, flight_id) 
-  VALUES ('2. Premium Economy', 'Middle', 'Infant', '0', ticket_code(7), 7);
+VALUES ('4. Economy', 'Window', 'Child', '0', ticket_code(3), 3);
 INSERT INTO tickets (class, seat, traveler, bags, code, flight_id) 
-  VALUES ('2. Premium Economy', 'Middle', 'Infant', '1', ticket_code(8), 8);
+VALUES ('3. Premium Economy', 'Window', 'Child', '2', ticket_code(4), 4);
 INSERT INTO tickets (class, seat, traveler, bags, code, flight_id) 
-  VALUES ('2. Premium Economy', 'Window', 'Adult', '2', ticket_code(8), 8);
+VALUES ('2. Business Class', 'Aisle', 'Adult', '1', ticket_code(4), 4);
 INSERT INTO tickets (class, seat, traveler, bags, code, flight_id) 
-  VALUES ('1. Economy', 'Aisle', 'Adult', '1', ticket_code(9), 9);
+VALUES ('1. First Class', 'Window', 'Infant', '2', ticket_code(6), 6);
 INSERT INTO tickets (class, seat, traveler, bags, code, flight_id) 
-  VALUES ('4. First Class', 'Window', 'Adult', '2', ticket_code(9), 9);
+VALUES ('2. Business Class', 'Window', 'Child', '0', ticket_code(6), 6);
 INSERT INTO tickets (class, seat, traveler, bags, code, flight_id) 
-  VALUES ('1. Economy', 'Aisle', 'Child', '2', ticket_code(12), 12);
+VALUES ('3. Premium Economy', 'Middle', 'Infant', '0', ticket_code(6), 6);
 INSERT INTO tickets (class, seat, traveler, bags, code, flight_id) 
-  VALUES ('1. Economy', 'Window', 'Infant', '0', ticket_code(13), 13);
+VALUES ('2. Business Class', 'Middle', 'Child', '1', ticket_code(6), 6);
 INSERT INTO tickets (class, seat, traveler, bags, code, flight_id) 
-  VALUES ('1. Economy', 'Window', 'Infant', '1', ticket_code(14), 14);
+VALUES ('4. Economy', 'Middle', 'Child', '1', ticket_code(7), 7);
 INSERT INTO tickets (class, seat, traveler, bags, code, flight_id) 
-  VALUES ('3. Business Class', 'Window', 'Adult', '2', ticket_code(14), 14);
+VALUES ('4. Economy', 'Aisle', 'Child', '0', ticket_code(7), 7);
 INSERT INTO tickets (class, seat, traveler, bags, code, flight_id) 
-  VALUES ('1. Economy', 'Aisle', 'Child', '0', ticket_code(14), 14);
+VALUES ('4. Economy', 'Window', 'Child', '1', ticket_code(7), 7);
 INSERT INTO tickets (class, seat, traveler, bags, code, flight_id) 
-  VALUES ('4. First Class', 'Middle', 'Infant', '2', ticket_code(14), 14);
+VALUES ('1. First Class', 'Middle', 'Adult', '0', ticket_code(8), 8);
 INSERT INTO tickets (class, seat, traveler, bags, code, flight_id) 
-  VALUES ('3. Business Class', 'Middle', 'Adult', '1', ticket_code(15), 15);
+VALUES ('3. Premium Economy', 'Middle', 'Infant', '0', ticket_code(8), 8);
 INSERT INTO tickets (class, seat, traveler, bags, code, flight_id) 
-  VALUES ('3. Business Class', 'Middle', 'Child', '0', ticket_code(15), 15);
+VALUES ('2. Business Class', 'Middle', 'Adult', '0', ticket_code(8), 8);
 INSERT INTO tickets (class, seat, traveler, bags, code, flight_id) 
-  VALUES ('1. Economy', 'Aisle', 'Adult', '1', ticket_code(18), 18);
+VALUES ('3. Premium Economy', 'Aisle', 'Child', '1', ticket_code(8), 8);
 INSERT INTO tickets (class, seat, traveler, bags, code, flight_id) 
-  VALUES ('3. Business Class', 'Window', 'Child', '1', ticket_code(18), 18);
+VALUES ('1. First Class', 'Window', 'Infant', '1', ticket_code(9), 9);
 INSERT INTO tickets (class, seat, traveler, bags, code, flight_id) 
-  VALUES ('1. Economy', 'Aisle', 'Adult', '2', ticket_code(19), 19);
+VALUES ('2. Business Class', 'Window', 'Adult', '0', ticket_code(9), 9);
 INSERT INTO tickets (class, seat, traveler, bags, code, flight_id) 
-  VALUES ('4. First Class', 'Window', 'Child', '2', ticket_code(19), 19);
+VALUES ('4. Economy', 'Aisle', 'Infant', '0', ticket_code(10), 10);
 INSERT INTO tickets (class, seat, traveler, bags, code, flight_id) 
-  VALUES ('4. First Class', 'Aisle', 'Infant', '0', ticket_code(19), 19);
+VALUES ('4. Economy', 'Middle', 'Child', '0', ticket_code(11), 11);
 INSERT INTO tickets (class, seat, traveler, bags, code, flight_id) 
-  VALUES ('3. Business Class', 'Window', 'Adult', '0', ticket_code(19), 19);
+VALUES ('2. Business Class', 'Window', 'Adult', '2', ticket_code(11), 11);
 INSERT INTO tickets (class, seat, traveler, bags, code, flight_id) 
-  VALUES ('4. First Class', 'Window', 'Child', '2', ticket_code(20), 20);
+VALUES ('4. Economy', 'Middle', 'Infant', '1', ticket_code(12), 12);
 INSERT INTO tickets (class, seat, traveler, bags, code, flight_id) 
-  VALUES ('3. Business Class', 'Window', 'Child', '2', ticket_code(20), 20);
+VALUES ('2. Business Class', 'Window', 'Infant', '0', ticket_code(12), 12);
 INSERT INTO tickets (class, seat, traveler, bags, code, flight_id) 
-  VALUES ('4. First Class', 'Aisle', 'Adult', '2', ticket_code(20), 20);
+VALUES ('4. Economy', 'Window', 'Child', '2', ticket_code(12), 12);
+INSERT INTO tickets (class, seat, traveler, bags, code, flight_id) 
+VALUES ('1. First Class', 'Aisle', 'Infant', '2', ticket_code(12), 12);
+INSERT INTO tickets (class, seat, traveler, bags, code, flight_id) 
+VALUES ('4. Economy', 'Window', 'Infant', '1', ticket_code(13), 13);
+INSERT INTO tickets (class, seat, traveler, bags, code, flight_id) 
+VALUES ('3. Premium Economy', 'Middle', 'Child', '0', ticket_code(13), 13);
+INSERT INTO tickets (class, seat, traveler, bags, code, flight_id) 
+VALUES ('1. First Class', 'Window', 'Infant', '1', ticket_code(13), 13);
+INSERT INTO tickets (class, seat, traveler, bags, code, flight_id) 
+VALUES ('2. Business Class', 'Window', 'Adult', '2', ticket_code(13), 13);
+INSERT INTO tickets (class, seat, traveler, bags, code, flight_id) 
+VALUES ('1. First Class', 'Aisle', 'Adult', '0', ticket_code(14), 14);
+INSERT INTO tickets (class, seat, traveler, bags, code, flight_id) 
+VALUES ('4. Economy', 'Window', 'Child', '1', ticket_code(14), 14);
+INSERT INTO tickets (class, seat, traveler, bags, code, flight_id) 
+VALUES ('4. Economy', 'Window', 'Child', '2', ticket_code(14), 14);
+INSERT INTO tickets (class, seat, traveler, bags, code, flight_id) 
+VALUES ('1. First Class', 'Window', 'Infant', '0', ticket_code(15), 15);
+INSERT INTO tickets (class, seat, traveler, bags, code, flight_id) 
+VALUES ('4. Economy', 'Middle', 'Infant', '0', ticket_code(15), 15);
+INSERT INTO tickets (class, seat, traveler, bags, code, flight_id) 
+VALUES ('1. First Class', 'Middle', 'Infant', '0', ticket_code(15), 15);
+INSERT INTO tickets (class, seat, traveler, bags, code, flight_id) 
+VALUES ('2. Business Class', 'Aisle', 'Child', '0', ticket_code(15), 15);
+INSERT INTO tickets (class, seat, traveler, bags, code, flight_id) 
+VALUES ('2. Business Class', 'Aisle', 'Adult', '2', ticket_code(16), 16);
+INSERT INTO tickets (class, seat, traveler, bags, code, flight_id) 
+VALUES ('2. Business Class', 'Window', 'Child', '0', ticket_code(16), 16);
+INSERT INTO tickets (class, seat, traveler, bags, code, flight_id) 
+VALUES ('4. Economy', 'Aisle', 'Child', '2', ticket_code(17), 17);
+INSERT INTO tickets (class, seat, traveler, bags, code, flight_id) 
+VALUES ('4. Economy', 'Window', 'Adult', '1', ticket_code(19), 19);
+INSERT INTO tickets (class, seat, traveler, bags, code, flight_id) 
+VALUES ('1. First Class', 'Aisle', 'Child', '2', ticket_code(20), 20);

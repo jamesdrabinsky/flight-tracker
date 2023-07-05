@@ -181,7 +181,7 @@ class DatabasePersistence
       SELECT *
       FROM tickets
       WHERE flight_id = $1
-      ORDER BY SUBSTRING(class::text, '^[0-9]{1}')::int DESC, bags DESC;
+      ORDER BY SUBSTRING(class::text, '^[0-9]{1}')::int, bags DESC;
     SQL
   
     result = query(sql, flight_id)
